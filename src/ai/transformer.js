@@ -74,16 +74,24 @@ export class DecoderOnlyTransformer {
     this.lmHead = randn(this.dModel, this.vocabSize, this.seed + 500);
   }
 
-  forward(tokenIds) {
+  embed(tokenIds) {
     const ids = tokenIds.slice(-this.contextLength);
-    const x = ids.map((id, pos) => Float32Array.from(this.tokenEmbedding[id % this.vocabSize], (v, d) => v + this.positionEmbedding[pos][d]));
-    let h = x;
-    for (const block of this.blocks) h = block.forward(h);
-    return matmul(h, this.lmHead);
+    return ids.map((id, pos) => Float32Array.from(this.tokenEmbedding[id % this.vocabSize], (v, d) => v + this.positionEmbedding[pos][d]));
+  }
+
+  forwardFeatures(tokenIds) {
+    const ids = tokenIds.slice(-this.contextLength);
+    let hidden = this.embed(ids);
+    for (const block of this.blocks) hidden = block.forward(hidden);
+    return { ids, hidden, logits: matmul(hidden, this.lmHead) };
+  }
+
+  forward(tokenIds) {
+    return this.forwardFeatures(tokenIds).logits;
   }
 
   toJSON() {
-    return { type: "astracore-decoder-transformer", version: 1, config: {
+    return { type: "astracore-decoder-transformer", version: 2, config: {
       vocabSize: this.vocabSize, contextLength: this.contextLength, dModel: this.dModel,
       heads: this.heads, ffDim: this.ffDim, layers: this.layers, seed: this.seed
     }};
