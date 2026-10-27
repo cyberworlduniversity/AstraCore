@@ -1,10 +1,3 @@
-function randn() {
-  let u = 0, v = 0;
-  while (u === 0) u = Math.random();
-  while (v === 0) v = Math.random();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-}
-
 function zeros(n) { return new Float64Array(n); }
 
 export class NeuralLanguageModel {
@@ -30,14 +23,14 @@ export class NeuralLanguageModel {
     const e = tokenId * this.embeddingDim;
     for (let j = 0; j < this.vocabSize; j++) {
       let sum = this.bias[j];
-      const o = j;
-      for (let d = 0; d < this.embeddingDim; d++) sum += this.embeddings[e + d] * this.output[d * this.vocabSize + o];
+      for (let d = 0; d < this.embeddingDim; d++) sum += this.embeddings[e + d] * this.output[d * this.vocabSize + j];
       logits[j] = sum;
     }
     return logits;
   }
 
   trainStep(inputId, targetId) {
+    if (targetId < 0 || targetId >= this.vocabSize) throw new RangeError('invalid targetId');
     const logits = this.logits(inputId);
     let max = -Infinity;
     for (const x of logits) max = Math.max(max, x);
@@ -50,14 +43,18 @@ export class NeuralLanguageModel {
     grad[targetId] -= 1;
     const e = inputId * this.embeddingDim;
     const oldEmbedding = this.embeddings.slice(e, e + this.embeddingDim);
+    const oldOutput = this.output.slice();
+    const embeddingGrad = new Float64Array(this.embeddingDim);
+
     for (let j = 0; j < this.vocabSize; j++) {
       this.bias[j] -= this.learningRate * grad[j];
       for (let d = 0; d < this.embeddingDim; d++) {
         const idx = d * this.vocabSize + j;
+        embeddingGrad[d] += oldOutput[idx] * grad[j];
         this.output[idx] -= this.learningRate * oldEmbedding[d] * grad[j];
-        this.embeddings[e + d] -= this.learningRate * this.learningRate * this.output[idx] * grad[j];
       }
     }
+    for (let d = 0; d < this.embeddingDim; d++) this.embeddings[e + d] -= this.learningRate * embeddingGrad[d];
     return -Math.log(Math.max(probs[targetId], 1e-12));
   }
 
