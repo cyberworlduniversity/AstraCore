@@ -1,0 +1,15 @@
+{
+  "name": "astracore",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AstraCore local-first neural language model foundation",
+  "type": "module",
+  "scripts": {
+    "start": "node server/server.js",
+    "train:demo": "node scripts/train-demo.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
