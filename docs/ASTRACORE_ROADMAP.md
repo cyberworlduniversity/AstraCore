@@ -4,50 +4,52 @@
 
 - [x] Initialize repository
 - [x] Define AI architecture
-- [ ] Select runtime and dependency strategy
-- [ ] Add project skeleton
-- [ ] Add baseline tests
+- [x] Select Node.js runtime and dependency-free strategy
+- [x] Add project skeleton
+- [x] Add baseline tests
 
 ## Phase 2 — Neural core
 
-- [ ] Tokenizer and vocabulary
-- [ ] Tensor abstraction
-- [ ] Embeddings
+- [x] Character tokenizer and vocabulary
+- [x] Trainable tensor-like parameter storage using typed arrays
+- [x] Token embeddings
 - [ ] Causal self-attention
 - [ ] Transformer block
-- [ ] Decoder-only language model
-- [ ] Forward pass tests
+- [ ] Decoder-only transformer language model
+- [x] Neural language-model forward pass tests
+
+> v0.1 currently contains a small trainable neural language-model baseline (embedding + linear output). Transformer attention is the next neural-core milestone; this baseline is intentionally not presented as a transformer or GPT-class model.
 
 ## Phase 3 — Training
 
-- [ ] Dataset loader
-- [ ] Causal language-model batches
-- [ ] Cross-entropy loss
-- [ ] Optimizer
-- [ ] Trainer
-- [ ] Checkpoints
+- [x] Dataset/corpus demo loader
+- [x] Causal next-token training pairs
+- [x] Cross-entropy loss
+- [x] SGD-style optimizer update
+- [x] Demo trainer
+- [x] Versioned checkpoints
 
 ## Phase 4 — Inference
 
-- [ ] Autoregressive generation
-- [ ] Temperature
-- [ ] Top-k
+- [x] Autoregressive generation
+- [x] Temperature
+- [x] Top-k
 - [ ] Top-p
 - [ ] Repetition control
-- [ ] Stop sequences
+- [x] EOS stopping
 
 ## Phase 5 — Platform integration
 
-- [ ] `/api/chat`
+- [x] `/api/chat`
 - [ ] Context management
 - [ ] Conversation memory
-- [ ] Safety controls
-- [ ] Resource limits
+- [ ] Safety policy layer
+- [x] Request size/resource limits
 
 ## Phase 6 — Verification
 
-- [ ] Unit tests
-- [ ] Integration tests
+- [x] Neural-core unit tests
+- [ ] API integration tests
 - [ ] Security tests
 - [ ] Performance measurements
 - [ ] Reproducible benchmark report
