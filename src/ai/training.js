@@ -54,24 +54,30 @@ export function clipGradients(parameters, maxNorm = 1) {
   return { norm, scale };
 }
 
+export function perplexity(loss) { return Math.exp(Math.min(loss, 50)); }
+
 export class TransformerTrainer {
-  constructor(model, { learningRate = 3e-4, weightDecay = 0.01, maxGradNorm = 1 } = {}) {
+  constructor(model, { learningRate = 3e-4, weightDecay = 0.01, maxGradNorm = 1, gradClip = maxGradNorm } = {}) {
     this.model = model;
     this.optimizer = new AdamW({ learningRate, weightDecay });
-    this.maxGradNorm = maxGradNorm;
+    this.maxGradNorm = gradClip;
     this.step = 0;
+    this.steps = 0;
   }
   trainSample(inputIds, targetIds) {
     const features = this.model.forwardFeatures(inputIds);
     const targets = targetIds.slice(-features.ids.length);
+    if (!targets.length) throw new Error('Training sample must contain at least one target token');
     const loss = crossEntropy(features.logits, targets);
     const gradients = this.model.backward(features, makeLogitGradients(features.logits, targets));
     const parameters = collect(this.model, gradients);
     const clip = clipGradients(parameters, this.maxGradNorm);
     this.optimizer.stepMany(parameters);
     this.step += 1;
-    return { loss, gradNorm: clip.norm, clipped: clip.scale < 1, step: this.step };
+    this.steps = this.step;
+    return { loss, gradNorm: clip.norm, gradientNorm: clip.norm, clipped: clip.scale < 1, step: this.step, steps: this.steps };
   }
+  trainStep(inputIds, targetIds) { return this.trainSample(inputIds, targetIds); }
   evaluate(samples) {
     if (!samples.length) return { loss: 0, tokens: 0, perplexity: 1 };
     let total = 0, tokens = 0;
@@ -82,7 +88,7 @@ export class TransformerTrainer {
       tokens += targets.length;
     }
     const loss = total / Math.max(tokens, 1);
-    return { loss, tokens, perplexity: Math.exp(Math.min(loss, 20)) };
+    return { loss, tokens, perplexity: perplexity(loss) };
   }
   train(samples, { epochs = 1, validation = [], onStep } = {}) {
     const history = [];
