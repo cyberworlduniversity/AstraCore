@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#070a12">
+  <meta name="description" content="AstraCore — self-owned local-first neural AI web interface.">
+  <title>AstraCore AI</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">✦</span><div><strong>AstraCore</strong><small>Own Neural AI</small></div></div>
+      <div class="status-wrap"><span id="statusDot" class="dot offline"></span><span id="statusText">Checking model…</span></div>
+      <button id="settingsBtn" class="icon-btn" aria-label="Open settings">⚙</button>
+    </header>
+
+    <main class="main">
+      <section id="welcome" class="welcome">
+        <div class="hero-mark">✦</div>
+        <h1>AstraCore AI</h1>
+        <p>Your self-owned neural language model interface.</p>
+        <div class="cards">
+          <button class="starter" data-prompt="Explain how a neural language model learns."><b>Learn</b><span>Understand neural networks</span></button>
+          <button class="starter" data-prompt="Give me a cybersecurity study plan for today."><b>Cybersecurity</b><span>Build a practical study plan</span></button>
+          <button class="starter" data-prompt="Write a small Python program that prints Hello AstraCore."><b>Code</b><span>Create a small example</span></button>
+        </div>
+      </section>
+      <section id="messages" class="messages" aria-live="polite"></section>
+    </main>
+
+    <form id="composer" class="composer">
+      <textarea id="message" rows="1" maxlength="4000" placeholder="Message AstraCore…" aria-label="Message AstraCore"></textarea>
+      <button id="sendBtn" class="send" type="submit" aria-label="Send message">➤</button>
+    </form>
+
+    <footer><span id="modelLabel">Model: checking…</span><span>Local-first • No commercial AI provider required</span></footer>
+  </div>
+
+  <dialog id="settingsDialog">
+    <form method="dialog" class="settings">
+      <div class="settings-head"><h2>Connection</h2><button class="icon-btn" value="cancel">✕</button></div>
+      <label>API base URL<input id="apiBase" type="url" placeholder="http://127.0.0.1:8787"></label>
+      <p class="hint">Leave empty to call <code>/api</code> on the same host. Use an API URL when the model server runs separately.</p>
+      <div class="settings-actions"><button id="resetApi" type="button">Reset</button><button class="primary" value="default">Save</button></div>
+    </form>
+  </dialog>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
