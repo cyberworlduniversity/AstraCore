@@ -6,6 +6,10 @@ const zeroVec = (a) => new Float32Array(a.length);
 const addInto = (a, b) => { for (let i = 0; i < a.length; i++) for (let j = 0; j < a[i].length; j++) a[i][j] += b[i][j]; };
 const add = (a, b) => { const out = zeros(a.length, a[0].length); for (let i = 0; i < a.length; i++) for (let j = 0; j < a[i].length; j++) out[i][j] = a[i][j] + b[i][j]; return out; };
 const matmulATB = (a, b) => { const out = zeros(a[0].length, b[0].length); for (let i = 0; i < a.length; i++) for (let k = 0; k < a[i].length; k++) for (let j = 0; j < b[0].length; j++) out[k][j] += a[i][k] * b[i][j]; return out; };
+const matrixToJSON = (m) => m.map((r) => Array.from(r));
+const vectorToJSON = (v) => Array.from(v);
+const matrixFromJSON = (m) => m.map((r) => Float32Array.from(r));
+const vectorFromJSON = (v) => Float32Array.from(v);
 
 function layerNormForward(x, gamma, beta, eps = 1e-5) {
   const y = zeros(x.length, x[0].length), cache = [], n = x[0].length;
@@ -103,5 +107,15 @@ export class DecoderOnlyTransformer {
     for (let t = 0; t < f.ids.length; t++) { const id = f.ids[t] % this.vocabSize; for (let d = 0; d < this.dModel; d++) { dToken[id][d] += dHidden[t][d]; dPos[t][d] += dHidden[t][d]; } }
     return { dLmHead, dToken, dPos, blockGrads };
   }
-  toJSON() { return { type: "astracore-decoder-transformer", version: 3, config: { vocabSize: this.vocabSize, contextLength: this.contextLength, dModel: this.dModel, heads: this.heads, ffDim: this.ffDim, layers: this.layers, seed: this.seed } }; }
+  toState() {
+    return { version: 4, config: { vocabSize: this.vocabSize, contextLength: this.contextLength, dModel: this.dModel, heads: this.heads, ffDim: this.ffDim, layers: this.layers, seed: this.seed }, tokenEmbedding: matrixToJSON(this.tokenEmbedding), positionEmbedding: matrixToJSON(this.positionEmbedding), lmHead: matrixToJSON(this.lmHead), blocks: this.blocks.map((b) => ({ q: b.attn.q.map(matrixToJSON), k: b.attn.k.map(matrixToJSON), v: b.attn.v.map(matrixToJSON), o: matrixToJSON(b.attn.o), ff1: matrixToJSON(b.ff1), ff2: matrixToJSON(b.ff2), g1: vectorToJSON(b.g1), b1: vectorToJSON(b.b1), g2: vectorToJSON(b.g2), b2: vectorToJSON(b.b2) })) };
+  }
+  toJSON() { return { type: "astracore-decoder-transformer", version: 4, state: this.toState() }; }
+  static fromState(state) {
+    if (!state?.config || state.version !== 4) throw new Error("Unsupported Transformer state");
+    const model = new DecoderOnlyTransformer(state.config);
+    model.tokenEmbedding = matrixFromJSON(state.tokenEmbedding); model.positionEmbedding = matrixFromJSON(state.positionEmbedding); model.lmHead = matrixFromJSON(state.lmHead);
+    model.blocks = state.blocks.map((s, i) => { const b = new TransformerBlock(state.config, state.config.seed + 10 + i); b.attn.q = s.q.map(matrixFromJSON); b.attn.k = s.k.map(matrixFromJSON); b.attn.v = s.v.map(matrixFromJSON); b.attn.o = matrixFromJSON(s.o); b.ff1 = matrixFromJSON(s.ff1); b.ff2 = matrixFromJSON(s.ff2); b.g1 = vectorFromJSON(s.g1); b.b1 = vectorFromJSON(s.b1); b.g2 = vectorFromJSON(s.g2); b.b2 = vectorFromJSON(s.b2); return b; });
+    return model;
+  }
 }
