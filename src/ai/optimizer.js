@@ -1,3 +1,10 @@
+function clone(value) {
+  return ArrayBuffer.isView(value) ? Array.from(value) : value.map((row) => Array.from(row));
+}
+function restore(value) {
+  return Array.isArray(value[0]) ? value.map((row) => Float32Array.from(row)) : Float32Array.from(value);
+}
+
 export class AdamW {
   constructor({ learningRate = 1e-3, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8, weightDecay = 0.01 } = {}) {
     this.learningRate = learningRate; this.beta1 = beta1; this.beta2 = beta2; this.epsilon = epsilon; this.weightDecay = weightDecay; this.stepCount = 0; this.state = new WeakMap();
@@ -16,4 +23,14 @@ export class AdamW {
     }
   }
   step(matrix, gradient) { this.stepMany([{ value: matrix, gradient }]); }
+  toJSON(parameters = []) {
+    return { version: 1, config: { learningRate: this.learningRate, beta1: this.beta1, beta2: this.beta2, epsilon: this.epsilon, weightDecay: this.weightDecay }, stepCount: this.stepCount,
+      state: parameters.map(({ name, value }) => { const s = this.state.get(value); const zero = ArrayBuffer.isView(value) ? new Float32Array(value.length) : value.map(row => new Float32Array(row.length)); return { name, m: clone(s?.m ?? zero), v: clone(s?.v ?? zero) }; }) };
+  }
+  loadJSON(data, parameters = []) {
+    if (!data || data.version !== 1) throw new Error('Unsupported AdamW state');
+    Object.assign(this, data.config); this.stepCount = data.stepCount;
+    const byName = new Map(data.state.map((s) => [s.name, s]));
+    for (const { name, value } of parameters) { const s = byName.get(name); if (s) this.state.set(value, { m: restore(s.m), v: restore(s.v) }); }
+  }
 }
