@@ -16,7 +16,7 @@ const MODEL_CONFIG={'astracore-neural-a':{name:'AstraCore Neural A',role:'Genera
 const engines={};
 async function loadEngine(id){const config=MODEL_CONFIG[id];try{await access(config.checkpoint);engines[id]=await loadCheckpoint(config.checkpoint,{Model:NeuralLanguageModel,Tokenizer:CharacterTokenizer})}catch{engines[id]=null}}
 function json(res,status,body,headers={}){res.writeHead(status,{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff','x-frame-options':'DENY','referrer-policy':'strict-origin-when-cross-origin',...headers});res.end(JSON.stringify(body))}
-function redirect(res,url,cookie=''){res.writeHead(302,{'location':url,'set-cookie':cookie?cookie:undefined,'cache-control':'no-store'});res.end()}
+function redirect(res,url,cookie=''){res.writeHead(302,{'location':url,...(cookie?{'set-cookie':cookie}:{}),'cache-control':'no-store'});res.end()}
 function readBody(req){return new Promise((resolve,reject)=>{let size=0,data='';req.on('data',chunk=>{size+=chunk.length;if(size>MAX_BODY){reject(Object.assign(new Error('Request too large'),{status:413}));req.destroy();return}data+=chunk});req.on('end',()=>resolve(data));req.on('error',reject)})}
 function selectedModel(id){return MODEL_CONFIG[id]?id:'astracore-neural-a'}
 function authorized(req,id){const configured=MODEL_KEYS[id];if(!configured)return true;const header=req.headers['x-astracore-key'];const bearer=typeof req.headers.authorization==='string'&&req.headers.authorization.startsWith('Bearer ')?req.headers.authorization.slice(7):'';return header===configured||bearer===configured}
@@ -29,17 +29,17 @@ const server=http.createServer(async(req,res)=>{try{
 const url=new URL(req.url,`http://${req.headers.host||'localhost'}`);
 if(req.method==='GET'&&url.pathname==='/api/health')return json(res,200,{ok:true,ready:Boolean(engines['astracore-neural-a']),model:'AstraCore neural core',architecture:'local-first-neural'});
 if(req.method==='GET'&&url.pathname==='/api/auth/me'){const user=await currentUser(req);return json(res,200,{authenticated:Boolean(user),user:user?{id:user.id,email:user.email,name:user.name,provider:user.provider,isAdmin:isAdmin(user)}:null})}
-if(req.method==='POST'&&url.pathname==='/api/auth/signup'){const body=JSON.parse(await readBody(req));const result=await signup(body.email,body.password,body.name);return json(res,201,{user:result.user},{'set-cookie':sessionCookie(result.token)})}
-if(req.method==='POST'&&url.pathname==='/api/auth/login'){const body=JSON.parse(await readBody(req));const result=await login(body.email,body.password);return json(res,200,{user:result.user},{'set-cookie':sessionCookie(result.token)})}
+if(req.method==='POST'&&url.pathname==='/api/auth/signup'){const body=JSON.parse(await readBody(req));const result=await signup(body.email,body.password,body.name);if(!result.token)return json(res,202,{user:result.user||null,message:'Account created. Check your email to confirm the account, then sign in.'});return json(res,201,{user:result.user},{'set-cookie':sessionCookie(result.token)})}
+if(req.method==='POST'&&url.pathname==='/api/auth/login'){const body=JSON.parse(await readBody(req));const result=await login(body.email,body.password);if(!result.token)return json(res,401,{error:'Authentication did not return a session. Confirm the account email and try again.'});return json(res,200,{user:result.user},{'set-cookie':sessionCookie(result.token)})}
 if(req.method==='POST'&&url.pathname==='/api/auth/logout')return json(res,200,{ok:true},{'set-cookie':clearSessionCookie()});
 if(req.method==='GET'&&url.pathname==='/auth/google')return redirect(res,oauthStart('google'));
 if(req.method==='GET'&&url.pathname==='/auth/github')return redirect(res,oauthStart('github'));
-if(req.method==='GET'&&url.pathname==='/auth/google/callback'){if(!validateOAuthState(url.searchParams.get('state'),'google'))return json(res,400,{error:'Invalid OAuth state'});const result=await oauthCallback('google',url.searchParams.get('code'));return redirect(res,'/',sessionCookie(result.token))}
-if(req.method==='GET'&&url.pathname==='/auth/github/callback'){if(!validateOAuthState(url.searchParams.get('state'),'github'))return json(res,400,{error:'Invalid OAuth state'});const result=await oauthCallback('github',url.searchParams.get('code'));return redirect(res,'/',sessionCookie(result.token))}
+if(req.method==='GET'&&url.pathname==='/auth/google/callback')return json(res,501,{error:'Google OAuth callback is not enabled yet. Use email/password login while OAuth PKCE is being configured.'});
+if(req.method==='GET'&&url.pathname==='/auth/github/callback')return json(res,501,{error:'GitHub OAuth callback is not enabled yet. Use email/password login while OAuth PKCE is being configured.'});
 if(req.method==='GET'&&url.pathname==='/api/capabilities'){if(!await requireUser(req,res))return;return json(res,200,publicCapabilities())}
 if(req.method==='GET'&&url.pathname==='/api/admin/models'){if(!await requireAdmin(req,res))return;return json(res,200,{models:adminModelDetails(),adminEmail:ADMIN_EMAIL})}
-if(req.method==='GET'&&url.pathname==='/api/admin/users'){if(!await requireAdmin(req,res))return;return json(res,200,{users:await listUsers()})}
-if(req.method==='GET'&&url.pathname==='/api/admin/overview'){if(!await requireAdmin(req,res))return;const users=await listUsers();return json(res,200,{adminEmail:ADMIN_EMAIL,userCount:users.length,models:adminModelDetails(),onlineModels:adminModelDetails().filter(m=>m.status==='Ready').length})}
+if(req.method==='GET'&&url.pathname==='/api/admin/users'){if(!await requireAdmin(req,res))return;return json(res,200,{users:await listUsers(req)})}
+if(req.method==='GET'&&url.pathname==='/api/admin/overview'){if(!await requireAdmin(req,res))return;const users=await listUsers(req);return json(res,200,{adminEmail:ADMIN_EMAIL,userCount:users.length,models:adminModelDetails(),onlineModels:adminModelDetails().filter(m=>m.status==='Ready').length})}
 if(req.method!=='POST'||url.pathname!=='/api/chat')return json(res,404,{error:'Not found'});
 const user=await requireUser(req,res);if(!user)return;
 const raw=await readBody(req);let body;try{body=JSON.parse(raw)}catch{return json(res,400,{error:'Invalid JSON'})}
