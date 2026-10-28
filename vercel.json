@@ -4,7 +4,11 @@
     { "source": "/auth", "destination": "/web/index.html" },
     { "source": "/login", "destination": "/web/index.html" },
     { "source": "/signup", "destination": "/web/index.html" },
-    { "source": "/admin", "destination": "/web/admin.html" }
+    { "source": "/admin", "destination": "/web/admin.html" },
+    { "source": "/auth/google", "destination": "/api/auth/google" },
+    { "source": "/auth/google/callback", "destination": "/api/auth/google/callback" },
+    { "source": "/auth/github", "destination": "/api/auth/github" },
+    { "source": "/auth/github/callback", "destination": "/api/auth/github/callback" }
   ],
   "headers": [
     {
