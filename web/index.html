@@ -3,47 +3,60 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#070a12">
-  <meta name="description" content="AstraCore — self-owned local-first neural AI web interface.">
-  <title>AstraCore AI</title>
+  <meta name="theme-color" content="#0b0d0f">
+  <meta name="description" content="AstraCore — self-owned local-first neural AI web application.">
+  <title>AstraCore — Neural AI</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <div class="app-shell">
-    <header class="topbar">
-      <div class="brand"><span class="brand-mark">✦</span><div><strong>AstraCore</strong><small>Own Neural AI</small></div></div>
-      <div class="status-wrap"><span id="statusDot" class="dot offline"></span><span id="statusText">Checking model…</span></div>
-      <button id="settingsBtn" class="icon-btn" aria-label="Open settings">⚙</button>
-    </header>
+    <aside id="sidebar" class="sidebar">
+      <div class="side-head"><div class="brand"><span class="brand-mark">✦</span><div><strong>AstraCore</strong><small>Neural AI</small></div></div><button id="closeSidebar" class="icon-btn mobile-only" aria-label="Close menu">×</button></div>
+      <button id="newChat" class="new-chat">＋ <span>New chat</span></button>
+      <nav class="side-nav" aria-label="Main navigation">
+        <button class="nav-item active"><span>⌂</span> Chat</button>
+        <button class="nav-item" id="historyBtn"><span>◷</span> History</button>
+        <button class="nav-item" id="settingsNav"><span>⚙</span> Settings</button>
+      </nav>
+      <div class="side-bottom"><div class="model-card"><span id="sideDot" class="dot offline"></span><div><b>AstraCore model</b><small id="sideModel">Checking status…</small></div></div><small class="privacy">Self-owned • Local-first</small></div>
+    </aside>
 
-    <main class="main">
-      <section id="welcome" class="welcome">
-        <div class="hero-mark">✦</div>
-        <h1>AstraCore AI</h1>
-        <p>Your self-owned neural language model interface.</p>
-        <div class="cards">
-          <button class="starter" data-prompt="Explain how a neural language model learns."><b>Learn</b><span>Understand neural networks</span></button>
-          <button class="starter" data-prompt="Give me a cybersecurity study plan for today."><b>Cybersecurity</b><span>Build a practical study plan</span></button>
-          <button class="starter" data-prompt="Write a small Python program that prints Hello AstraCore."><b>Code</b><span>Create a small example</span></button>
-        </div>
-      </section>
-      <section id="messages" class="messages" aria-live="polite"></section>
-    </main>
+    <div class="workspace">
+      <header class="topbar">
+        <button id="menuBtn" class="icon-btn mobile-only" aria-label="Open menu">☰</button>
+        <div class="title-area"><strong>Chat</strong><span id="statusText">Checking model…</span></div>
+        <div class="top-actions"><span id="statusDot" class="dot offline"></span><button id="settingsBtn" class="icon-btn" aria-label="Open settings">⚙</button></div>
+      </header>
 
-    <form id="composer" class="composer">
-      <textarea id="message" rows="1" maxlength="4000" placeholder="Message AstraCore…" aria-label="Message AstraCore"></textarea>
-      <button id="sendBtn" class="send" type="submit" aria-label="Send message">➤</button>
-    </form>
+      <main class="main">
+        <section id="welcome" class="welcome">
+          <div class="hero-mark">✦</div>
+          <h1>How can I help?</h1>
+          <p>AstraCore is your self-owned neural AI interface.</p>
+          <div class="cards">
+            <button class="starter" data-prompt="Explain how a neural language model learns."><span class="card-icon">✦</span><b>Learn</b><small>Understand neural networks</small></button>
+            <button class="starter" data-prompt="Give me a cybersecurity study plan for today."><span class="card-icon">⌁</span><b>Cybersecurity</b><small>Build a practical study plan</small></button>
+            <button class="starter" data-prompt="Write a small Python program that prints Hello AstraCore."><span class="card-icon">&lt;/&gt;</span><b>Code</b><small>Create a small example</small></button>
+          </div>
+        </section>
+        <section id="messages" class="messages" aria-live="polite"></section>
+      </main>
 
-    <footer><span id="modelLabel">Model: checking…</span><span>Local-first • No commercial AI provider required</span></footer>
+      <form id="composer" class="composer">
+        <textarea id="message" rows="1" maxlength="4000" placeholder="Message AstraCore…" aria-label="Message AstraCore"></textarea>
+        <div class="composer-row"><button type="button" id="attachBtn" class="tool-btn" aria-label="Attachments">＋</button><span class="composer-hint">Enter to send • Shift+Enter for new line</span><button id="sendBtn" class="send" type="submit" aria-label="Send message">↑</button></div>
+      </form>
+      <footer><span id="modelLabel">Model: checking…</span><span>AI responses may be experimental.</span></footer>
+    </div>
   </div>
 
   <dialog id="settingsDialog">
     <form method="dialog" class="settings">
-      <div class="settings-head"><h2>Connection</h2><button class="icon-btn" value="cancel">✕</button></div>
+      <div class="settings-head"><div><h2>Settings</h2><p>Connect the AstraCore web UI to your model server.</p></div><button class="icon-btn" value="cancel" aria-label="Close settings">×</button></div>
       <label>API base URL<input id="apiBase" type="url" placeholder="http://127.0.0.1:8787"></label>
-      <p class="hint">Leave empty to call <code>/api</code> on the same host. Use an API URL when the model server runs separately.</p>
-      <div class="settings-actions"><button id="resetApi" type="button">Reset</button><button class="primary" value="default">Save</button></div>
+      <p class="hint">Leave empty to use <code>/api</code> on the current host. For a separately hosted model server, enter its API base URL.</p>
+      <div class="settings-row"><span>Model status</span><b id="dialogStatus">Checking…</b></div>
+      <div class="settings-actions"><button id="resetApi" type="button">Reset</button><button class="primary" value="default">Save changes</button></div>
     </form>
   </dialog>
   <script type="module" src="./app.js"></script>
