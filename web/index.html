@@ -3,34 +3,102 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#0b0d0f">
-  <meta name="description" content="AstraCore — self-owned local-first neural AI web application.">
-  <title>AstraCore — Neural AI</title>
+  <meta name="theme-color" content="#07090c">
+  <meta name="description" content="AstraCore — self-owned local-first neural AI workspace.">
+  <title>AstraCore — Local AI Workspace</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <div class="app-shell">
     <aside id="sidebar" class="sidebar">
-      <div class="side-head"><div class="brand"><span class="brand-mark">✦</span><div><strong>AstraCore</strong><small>Neural AI</small></div></div><button id="closeSidebar" class="icon-btn mobile-only" aria-label="Close menu">×</button></div>
+      <div class="side-head"><div class="brand"><span class="brand-mark">✦</span><div><strong>AstraCore</strong><small>Own Neural AI</small></div></div><button id="closeSidebar" class="icon-btn mobile-only" aria-label="Close menu">×</button></div>
       <button id="newChat" class="new-chat">＋ <span>New chat</span></button>
-      <nav class="side-nav" aria-label="Main navigation">
-        <button class="nav-item active"><span>⌂</span> Chat</button>
-        <button class="nav-item" id="historyBtn"><span>◷</span> History</button>
-        <button class="nav-item" id="settingsNav"><span>⚙</span> Settings</button>
+      <nav class="side-nav" aria-label="Workspace">
+        <button class="nav-item active" data-view="chat"><span>⌂</span> Chat</button>
+        <button class="nav-item" data-view="agents"><span>✦</span> Agents</button>
+        <button class="nav-item" data-view="create"><span>◈</span> Create</button>
+        <button class="nav-item" data-view="code"><span>&lt;/&gt;</span> Code</button>
+        <button class="nav-item" data-view="models"><span>▣</span> Models</button>
+        <button class="nav-item" data-view="history"><span>◷</span> History</button>
+        <button class="nav-item" data-view="settings"><span>⚙</span> Settings</button>
       </nav>
-      <div class="side-bottom"><div class="model-card"><span id="sideDot" class="dot offline"></span><div><b>AstraCore model</b><small id="sideModel">Checking status…</small></div></div><small class="privacy">Self-owned • Local-first</small></div>
+      <div class="side-bottom">
+        <div class="model-card"><span id="sideDot" class="dot offline"></span><div><b>Local neural core</b><small id="sideModel">Checking status…</small></div></div>
+        <small class="privacy">No commercial AI provider required</small>
+      </div>
     </aside>
+
     <div class="workspace">
-      <header class="topbar"><button id="menuBtn" class="icon-btn mobile-only" aria-label="Open menu">☰</button><div class="title-area"><strong>Chat</strong><span id="statusText">Checking model…</span></div><div class="top-actions"><span id="statusDot" class="dot offline"></span><button id="settingsBtn" class="icon-btn" aria-label="Open settings">⚙</button></div></header>
+      <header class="topbar">
+        <button id="menuBtn" class="icon-btn mobile-only" aria-label="Open menu">☰</button>
+        <div class="title-area"><strong id="pageTitle">AstraCore</strong><span id="statusText">Checking local model…</span></div>
+        <div class="top-actions"><span id="statusDot" class="dot offline"></span><button id="settingsBtn" class="icon-btn" aria-label="Settings">⚙</button></div>
+      </header>
+
       <main class="main">
-        <section id="welcome" class="welcome"><div class="hero-mark">✦</div><h1>How can I help?</h1><p>AstraCore is your self-owned neural AI interface.</p><div class="cards"><button class="starter" data-prompt="Explain how a neural language model learns."><span class="card-icon">✦</span><b>Learn</b><small>Understand neural networks</small></button><button class="starter" data-prompt="Give me a cybersecurity study plan for today."><span class="card-icon">⌁</span><b>Cybersecurity</b><small>Build a practical study plan</small></button><button class="starter" data-prompt="Write a small Python program that prints Hello AstraCore."><span class="card-icon">&lt;/&gt;</span><b>Code</b><small>Create a small example</small></button></div></section>
-        <section id="messages" class="messages" aria-live="polite"></section>
+        <section id="view-chat" class="view active-view">
+          <section id="welcome" class="welcome">
+            <div class="hero-mark">✦</div>
+            <h1>Your local AI workspace.</h1>
+            <p>Chat, code, create, automate and run agents through your own AstraCore model.</p>
+            <div class="quick-grid">
+              <button class="quick-card" data-action="chat" data-prompt="Explain this concept clearly with examples."><b>Chat</b><small>Ask your own neural model anything it has learned.</small></button>
+              <button class="quick-card" data-action="code" data-prompt="Build a clean JavaScript function for this task: "><b>Code assistant</b><small>Generate, explain, debug and improve code.</small></button>
+              <button class="quick-card" data-action="create" data-tool="image"><b>Image studio</b><small>Local image generation adapter workspace.</small></button>
+              <button class="quick-card" data-action="create" data-tool="video"><b>Video studio</b><small>Local video generation adapter workspace.</small></button>
+              <button class="quick-card" data-action="agents"><b>Agent builder</b><small>Plan multi-step tasks with safe tool execution.</small></button>
+              <button class="quick-card" data-action="models"><b>Model center</b><small>Inspect local models, context and readiness.</small></button>
+            </div>
+          </section>
+          <section id="messages" class="messages" aria-live="polite"></section>
+        </section>
+
+        <section id="view-agents" class="view">
+          <div class="section-head"><div><h2>Agents</h2><p>Use AstraCore as the planner and let approved local tools perform each step.</p></div></div>
+          <div class="feature-grid">
+            <button class="feature-card" data-agent="Research Agent"><span>⌕</span><b>Research Agent</b><small>Search, collect, summarize and organize information.</small></button>
+            <button class="feature-card" data-agent="Coding Agent"><span>&lt;/&gt;</span><b>Coding Agent</b><small>Inspect files, propose changes, test and explain code.</small></button>
+            <button class="feature-card" data-agent="Automation Agent"><span>⚡</span><b>Automation Agent</b><small>Run approved local workflows with confirmations.</small></button>
+            <button class="feature-card" data-agent="Cybersecurity Agent"><span>◉</span><b>Cybersecurity Agent</b><small>Defensive analysis, learning labs and safe checklists.</small></button>
+            <button class="feature-card" data-agent="Content Agent"><span>✎</span><b>Content Agent</b><small>Draft documents, posts, lessons and structured content.</small></button>
+            <button class="feature-card" data-agent="Custom Agent"><span>＋</span><b>Custom Agent</b><small>Create your own tool set and instructions.</small></button>
+          </div>
+          <div class="info-panel"><b>Execution policy</b><p>AstraCore can plan a task, but sensitive actions, code execution, file changes and external requests must be explicitly approved by the user.</p></div>
+        </section>
+
+        <section id="view-create" class="view">
+          <div class="section-head"><div><h2>Create</h2><p>One workspace for local creative models. Connect adapters as they become available.</p></div></div>
+          <div class="feature-grid two">
+            <button class="feature-card large" data-tool="image"><span>◈</span><b>Image generation</b><small>Prompt → local image model → preview → save.</small><em>Adapter: not installed</em></button>
+            <button class="feature-card large" data-tool="video"><span>▶</span><b>Video generation</b><small>Prompt/image → local video model → preview → export.</small><em>Adapter: not installed</em></button>
+            <button class="feature-card large" data-tool="audio"><span>♫</span><b>Audio generation</b><small>Text → local audio/speech model.</small><em>Adapter: not installed</em></button>
+            <button class="feature-card large" data-tool="document"><span>▤</span><b>Document studio</b><small>Generate structured documents with the neural core.</small><em>Available through Chat</em></button>
+          </div>
+        </section>
+
+        <section id="view-code" class="view">
+          <div class="section-head"><div><h2>Code assistant</h2><p>A dedicated interface for coding, debugging, explanations and project planning.</p></div></div>
+          <div class="code-workspace">
+            <textarea id="codePrompt" placeholder="Describe the code you want AstraCore to build…"></textarea>
+            <div class="tool-row"><button class="primary-btn" id="runCodeTask">Run with AstraCore</button><button class="ghost-btn" id="clearCode">Clear</button></div>
+            <div class="code-info"><span>✓ Own neural model</span><span>✓ No browser AI key</span><span>✓ Local-first API</span></div>
+          </div>
+        </section>
+
+        <section id="view-models" class="view">
+          <div class="section-head"><div><h2>Model center</h2><p>All intelligence is represented as local model capabilities. No fake provider buttons.</p></div></div>
+          <div class="model-grid" id="modelGrid"></div>
+          <div class="info-panel"><b>Architecture</b><p>UI → AstraCore API → task router → own neural language model → approved local tools/models. Image/video/audio models are optional local adapters, not hidden commercial APIs.</p></div>
+        </section>
+
+        <section id="view-history" class="view"><div class="section-head"><div><h2>History</h2><p>Conversation history is stored locally in this browser.</p></div></div><div id="historyList" class="history-list"></div></section>
+        <section id="view-settings" class="view"><div class="section-head"><div><h2>Settings</h2><p>Configure the local AstraCore API endpoint and interface.</p></div></div><div class="settings-page"><label>API base URL<input id="apiBasePage" type="url" placeholder="Leave empty for /api"></label><div class="settings-row"><span>Model status</span><b id="pageDialogStatus">Checking…</b></div><div class="tool-row"><button class="primary-btn" id="saveSettings">Save settings</button><button class="ghost-btn" id="resetApiPage">Reset</button></div></div></section>
       </main>
+
       <form id="composer" class="composer"><textarea id="message" rows="1" maxlength="4000" placeholder="Message AstraCore…" aria-label="Message AstraCore"></textarea><div class="composer-row"><button type="button" id="attachBtn" class="tool-btn" aria-label="Attachments">＋</button><span class="composer-hint">Enter to send • Shift+Enter for new line</span><button id="sendBtn" class="send" type="submit" aria-label="Send message">↑</button></div></form>
-      <footer><span id="modelLabel">Model: checking…</span><span>AI responses may be experimental.</span></footer>
+      <footer><span id="modelLabel">Model: checking…</span><span>Local-first • Experimental neural model</span></footer>
     </div>
   </div>
-  <dialog id="settingsDialog"><form method="dialog" class="settings"><div class="settings-head"><div><h2>Settings</h2><p>Connect the AstraCore web UI to your model server.</p></div><button class="icon-btn" value="cancel" aria-label="Close settings">×</button></div><label>API base URL<input id="apiBase" type="url" placeholder="http://127.0.0.1:8787"></label><p class="hint">Leave empty to use <code>/api</code> on the current host. For a separately hosted model server, enter its API base URL.</p><div class="settings-row"><span>Model status</span><b id="dialogStatus">Checking…</b></div><div class="settings-actions"><button id="resetApi" type="button">Reset</button><button class="primary" value="default">Save changes</button></div></form></dialog>
   <script type="module" src="./app.js"></script>
 </body>
 </html>
