@@ -7,15 +7,26 @@ const sendBtn = $('sendBtn');
 const apiBaseInput = $('apiBase');
 const dialog = $('settingsDialog');
 const statusDot = $('statusDot');
+const sideDot = $('sideDot');
 const statusText = $('statusText');
+const sideModel = $('sideModel');
 const modelLabel = $('modelLabel');
+const dialogStatus = $('dialogStatus');
 
 let apiBase = localStorage.getItem('astracore.apiBase') || '';
 apiBaseInput.value = apiBase;
 
 function apiUrl(path) {
   const base = apiBase.trim().replace(/\/$/, '');
-  return `${base}${base ? '' : ''}${path}`;
+  return `${base}${path}`;
+}
+
+function makeButton(label, action) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = label;
+  button.addEventListener('click', action);
+  return button;
 }
 
 function addMessage(role, text) {
@@ -25,29 +36,50 @@ function addMessage(role, text) {
   const avatar = document.createElement('div');
   avatar.className = 'avatar';
   avatar.textContent = role === 'user' ? 'You' : '✦';
+  const wrap = document.createElement('div');
+  wrap.className = 'bubble-wrap';
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
   bubble.textContent = text;
-  row.append(avatar, bubble);
-  if (role === 'user') row.insertBefore(bubble, avatar);
+  wrap.appendChild(bubble);
+  if (role === 'assistant') {
+    const tools = document.createElement('div');
+    tools.className = 'message-tools';
+    tools.append(makeButton('Copy', () => navigator.clipboard?.writeText(bubble.textContent || '')));
+    wrap.appendChild(tools);
+  }
+  if (role === 'user') { row.append(bubble, avatar); } else { row.append(avatar, wrap); }
   messages.appendChild(row);
   row.scrollIntoView({ behavior: 'smooth', block: 'end' });
   return bubble;
+}
+
+function setStatus(ready, model) {
+  const stateClass = `dot ${ready ? 'online' : 'offline'}`;
+  statusDot.className = stateClass;
+  sideDot.className = stateClass;
+  statusText.textContent = ready ? 'Model online' : 'Model unavailable';
+  sideModel.textContent = model || (ready ? 'Ready for chat' : 'Connect your API');
+  modelLabel.textContent = `Model: ${model || 'not loaded'}`;
+  dialogStatus.textContent = ready ? 'Online' : 'Offline';
 }
 
 async function checkHealth() {
   try {
     const response = await fetch(apiUrl('/api/health'), { cache: 'no-store' });
     const data = await response.json();
-    const ready = response.ok && data.ready;
-    statusDot.className = `dot ${ready ? 'online' : 'offline'}`;
-    statusText.textContent = ready ? 'Model online' : 'Model not trained';
-    modelLabel.textContent = `Model: ${data.model || 'not loaded'}`;
+    setStatus(response.ok && data.ready, data.model);
   } catch {
-    statusDot.className = 'dot offline';
-    statusText.textContent = 'API offline';
-    modelLabel.textContent = 'Model: unavailable';
+    setStatus(false, 'API offline');
   }
+}
+
+function resetChat() {
+  messages.replaceChildren();
+  welcome.hidden = false;
+  input.value = '';
+  input.style.height = 'auto';
+  input.focus();
 }
 
 async function sendMessage(text) {
@@ -55,6 +87,7 @@ async function sendMessage(text) {
   if (!message || composer.classList.contains('busy')) return;
   addMessage('user', message);
   input.value = '';
+  input.style.height = 'auto';
   composer.classList.add('busy');
   sendBtn.disabled = true;
   const pending = addMessage('assistant', 'Thinking…');
@@ -68,41 +101,28 @@ async function sendMessage(text) {
     if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
     pending.textContent = data.response || 'No response returned.';
     modelLabel.textContent = `Model: ${data.model || 'AstraCore'}`;
+    checkHealth();
   } catch (error) {
     pending.textContent = `AstraCore connection error: ${error.message}`;
   } finally {
     composer.classList.remove('busy');
     sendBtn.disabled = false;
-    checkHealth();
+    input.focus();
   }
 }
 
-composer.addEventListener('submit', (event) => {
-  event.preventDefault();
-  sendMessage(input.value);
-});
-input.addEventListener('input', () => {
-  input.style.height = 'auto';
-  input.style.height = `${Math.min(input.scrollHeight, 150)}px`;
-});
-input.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter' && !event.shiftKey) {
-    event.preventDefault();
-    composer.requestSubmit();
-  }
-});
-document.querySelectorAll('[data-prompt]').forEach((button) => button.addEventListener('click', () => {
-  input.value = button.dataset.prompt;
-  input.focus();
-  input.dispatchEvent(new Event('input'));
-}));
+composer.addEventListener('submit', (event) => { event.preventDefault(); sendMessage(input.value); });
+input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = `${Math.min(input.scrollHeight, 170)}px`; });
+input.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); composer.requestSubmit(); } });
+document.querySelectorAll('[data-prompt]').forEach((button) => button.addEventListener('click', () => { input.value = button.dataset.prompt; input.focus(); input.dispatchEvent(new Event('input')); }));
+
+$('newChat').addEventListener('click', resetChat);
+$('menuBtn').addEventListener('click', () => $('sidebar').classList.add('open'));
+$('closeSidebar').addEventListener('click', () => $('sidebar').classList.remove('open'));
+$('historyBtn').addEventListener('click', () => { resetChat(); $('sidebar').classList.remove('open'); });
+$('settingsNav').addEventListener('click', () => dialog.showModal());
 $('settingsBtn').addEventListener('click', () => dialog.showModal());
 $('resetApi').addEventListener('click', () => { apiBaseInput.value = ''; });
-dialog.addEventListener('close', () => {
-  if (dialog.returnValue === 'default') {
-    apiBase = apiBaseInput.value.trim().replace(/\/$/, '');
-    localStorage.setItem('astracore.apiBase', apiBase);
-    checkHealth();
-  }
-});
+$('attachBtn').addEventListener('click', () => input.focus());
+dialog.addEventListener('close', () => { if (dialog.returnValue === 'default') { apiBase = apiBaseInput.value.trim().replace(/\/$/, ''); localStorage.setItem('astracore.apiBase', apiBase); checkHealth(); } });
 checkHealth();
