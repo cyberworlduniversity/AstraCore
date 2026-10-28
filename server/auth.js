@@ -1,10 +1,12 @@
 import { randomBytes, scryptSync, timingSafeEqual, createHmac } from 'node:crypto';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
+
 const USERS_FILE=process.env.ASTRA_USERS_FILE||'data/users.json';
 const SESSION_SECRET=process.env.ASTRA_SESSION_SECRET||'change-this-astracore-session-secret';
 const ADMIN_EMAIL=(process.env.ASTRA_ADMIN_EMAIL||'ehemanathan143@gmail.com').toLowerCase();
 const PUBLIC_URL=(process.env.ASTRA_PUBLIC_URL||'http://127.0.0.1:8787').replace(/\/$/,'');
+
 function readUsers(){return readFile(USERS_FILE,'utf8').then(v=>JSON.parse(v)).catch(()=>[])}
 async function saveUsers(users){try{await mkdir(dirname(USERS_FILE),{recursive:true});await writeFile(USERS_FILE,JSON.stringify(users,null,2));return true}catch(error){if(error?.code==='EROFS'||error?.code==='EACCES')return false;throw error}}
 function normalizeEmail(e){return String(e||'').trim().toLowerCase()}
@@ -21,9 +23,24 @@ export async function currentUser(req){return readSigned(parseCookie(req,'astrac
 export function sessionCookie(token){return `astracore_session=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=604800`}
 export function clearSessionCookie(){return 'astracore_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0'}
 export function isAdmin(user){return Boolean(user?.isAdmin&&normalizeEmail(user.email)===ADMIN_EMAIL)}
-export async function signup(email,password,name){email=normalizeEmail(email);if(!email||password.length<8)throw Object.assign(new Error('Use a valid email and a password of at least 8 characters.'),{status:400});const users=await readUsers();if(users.some(u=>u.email===email))throw Object.assign(new Error('An account already exists for this email.'),{status:409});const user={id:randomBytes(12).toString('hex'),email,name:String(name||email.split('@')[0]).slice(0,80),provider:'password',passwordHash:passwordHash(password),createdAt:new Date().toISOString(),isAdmin:false};users.push(user);await saveUsers(users);const {passwordHash:_,...safe}=user;return {user:safe,token:makeSession(safe)}}
-export async function login(email,password){email=normalizeEmail(email);const users=await readUsers();const user=users.find(u=>u.email===email&&u.provider==='password');if(!user||!passwordMatches(password,user.passwordHash))throw Object.assign(new Error('Invalid email or password.'),{status:401});const {passwordHash:_,...safe}=user;return {user:safe,token:makeSession(safe)}}
-async function upsertOAuth(provider,profile){const email=normalizeEmail(profile.email);if(!email)throw Object.assign(new Error('The provider did not return an email address.'),{status:400});const users=await readUsers();let user=users.find(u=>u.email===email);if(!user){user={id:randomBytes(12).toString('hex'),email,name:String(profile.name||email.split('@')[0]).slice(0,80),provider,providerId:profile.id,createdAt:new Date().toISOString(),isAdmin:email===ADMIN_EMAIL};users.push(user)}else{user.name=String(profile.name||user.name).slice(0,80);user.provider=provider;user.providerId=profile.id;if(email===ADMIN_EMAIL)user.isAdmin=true}await saveUsers(users);return user}
+
+export async function signup(email,password,name){
+ email=normalizeEmail(email);
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||String(password||'').length<8)throw Object.assign(new Error('Use a valid email and a password of at least 8 characters.'),{status:400});
+ const users=await readUsers();
+ if(users.some(u=>u.email===email))throw Object.assign(new Error('An account already exists for this email.'),{status:409});
+ const user={id:randomBytes(12).toString('hex'),email,name:String(name||email.split('@')[0]).slice(0,80),provider:'password',passwordHash:passwordHash(password),createdAt:new Date().toISOString(),isAdmin:false};
+ users.push(user);const saved=await saveUsers(users);
+ if(!saved)throw Object.assign(new Error('Account storage is unavailable on this deployment. Configure durable AstraCore database storage before creating accounts.'),{status:503});
+ const {passwordHash:_,...safe}=user;return {user:safe,token:makeSession(safe)}
+}
+export async function login(email,password){
+ email=normalizeEmail(email);const users=await readUsers();
+ const user=users.find(u=>u.email===email&&u.provider==='password');
+ if(!user||!passwordMatches(password,user.passwordHash))throw Object.assign(new Error('Invalid email or password.'),{status:401});
+ const {passwordHash:_,...safe}=user;return {user:safe,token:makeSession(safe)}
+}
+async function upsertOAuth(provider,profile){const email=normalizeEmail(profile.email);if(!email)throw Object.assign(new Error('The provider did not return an email address.'),{status:400});const users=await readUsers();let user=users.find(u=>u.email===email);if(!user){user={id:randomBytes(12).toString('hex'),email,name:String(profile.name||email.split('@')[0]).slice(0,80),provider,providerId:profile.id,createdAt:new Date().toISOString(),isAdmin:email===ADMIN_EMAIL};users.push(user)}else{user.name=String(profile.name||user.name).slice(0,80);user.provider=provider;user.providerId=profile.id;if(email===ADMIN_EMAIL)user.isAdmin=true}const saved=await saveUsers(users);if(!saved)throw Object.assign(new Error('Account storage is unavailable on this deployment. Configure durable AstraCore database storage.'),{status:503});return user}
 export function oauthStart(provider){const state=makeSigned({provider,expires:Date.now()+600000});if(provider==='google'){if(!process.env.GOOGLE_CLIENT_ID)throw Object.assign(new Error('Google OAuth is not configured on AstraCore.'),{status:503});const p=new URLSearchParams({client_id:process.env.GOOGLE_CLIENT_ID,redirect_uri:`${PUBLIC_URL}/api/auth/google/callback`,response_type:'code',scope:'openid email profile',state,prompt:'select_account'});return `https://accounts.google.com/o/oauth2/v2/auth?${p}`}if(provider==='github'){if(!process.env.GITHUB_CLIENT_ID)throw Object.assign(new Error('GitHub OAuth is not configured on AstraCore.'),{status:503});const p=new URLSearchParams({client_id:process.env.GITHUB_CLIENT_ID,redirect_uri:`${PUBLIC_URL}/api/auth/github/callback`,scope:'read:user user:email',state});return `https://github.com/login/oauth/authorize?${p}`}throw Object.assign(new Error('Unsupported login provider'),{status:400})}
 export function validateOAuthState(state,provider){const value=readSigned(state);return Boolean(value&&value.provider===provider)}
 async function oauthToken(url,body){const r=await fetch(url,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded',accept:'application/json'},body:new URLSearchParams(body)});const d=await r.json();if(!r.ok)throw Object.assign(new Error(d.error_description||d.message||'OAuth token request failed'),{status:502});return d.access_token}
