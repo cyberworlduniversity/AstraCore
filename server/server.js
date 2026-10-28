@@ -15,18 +15,23 @@ const MAX_BODY = 16 * 1024;
 const MAX_MESSAGE = 4000;
 const CHECKPOINT = process.env.ASTRA_CHECKPOINT || 'data/checkpoints/astracore-demo.json';
 const TRANSFORMER_CHECKPOINT = process.env.ASTRA_TRANSFORMER_CHECKPOINT || 'data/checkpoints/astracore-transformer.json';
+const LEGACY_TRANSFORMER_CHECKPOINT = 'data/checkpoints/astracore-transformer-v0.4.json';
 const WEB_ROOT = fileURLToPath(new URL('../web/', import.meta.url));
 let engine = null;
 
+async function loadTransformerCheckpoint(path) {
+  await access(path);
+  const payload = JSON.parse(await readFile(path, 'utf8'));
+  const state = payload.state || payload.model?.state || payload;
+  if (!payload.tokenizer || !state?.config) throw new Error('Invalid Transformer checkpoint.');
+  const tokenizer = CharacterTokenizer.fromJSON(payload.tokenizer);
+  return { type: 'transformer', model: DecoderOnlyTransformer.fromState(state), tokenizer };
+}
+
 async function loadEngine() {
-  try {
-    await access(TRANSFORMER_CHECKPOINT);
-    const payload = JSON.parse(await readFile(TRANSFORMER_CHECKPOINT, 'utf8'));
-    const state = payload.state || payload.model?.state || payload;
-    const tokenizer = CharacterTokenizer.fromJSON ? CharacterTokenizer.fromJSON(payload.tokenizer) : new CharacterTokenizer();
-    engine = { type: 'transformer', model: DecoderOnlyTransformer.fromState(state), tokenizer };
-    return;
-  } catch {}
+  for (const path of [TRANSFORMER_CHECKPOINT, LEGACY_TRANSFORMER_CHECKPOINT]) {
+    try { engine = await loadTransformerCheckpoint(path); return; } catch {}
+  }
   try {
     await access(CHECKPOINT);
     engine = { type: 'baseline', ...(await loadCheckpoint(CHECKPOINT, { Model: NeuralLanguageModel, Tokenizer: CharacterTokenizer })) };
