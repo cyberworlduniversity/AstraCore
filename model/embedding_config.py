@@ -17,3 +17,9 @@ class EmbeddingConfig:
 
     def to_dict(self):
         return self.__dict__.copy()
+
+    @classmethod
+    def from_dict(cls, payload):
+        allowed = {"vocab_size", "embedding_dim", "hidden_dim", "max_length", "dropout"}
+        values = {key: payload[key] for key in allowed if key in payload}
+        return cls(**values)
