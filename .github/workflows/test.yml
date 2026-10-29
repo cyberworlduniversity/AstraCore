@@ -22,7 +22,7 @@ jobs:
       - name: Validate Python extractor
         run: python -m py_compile scripts/document_extract.py
       - name: Run Python extractor tests
-        run: python -m pytest -q tests/test_document_extract.py
+        run: python -m unittest -v tests/test_document_extract.py
       - name: Run Node tests
         run: npm test
       - name: Validate server syntax
