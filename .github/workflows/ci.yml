@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
@@ -25,6 +25,10 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Apply Steps 12-15 implementation
+        if: "!contains(github.event.head_commit.message, '[steps-12-15-complete]')"
+        run: python3 scripts/apply_steps_12_15.py
+
       - name: Run test suite
         run: npm test
 
@@ -32,4 +36,16 @@ jobs:
         run: |
           node --check server/server.js
           node --check server/auth.js
+          node --check server/knowledge-api.js
+          node --check server/embedding-service.js
           node --check api/[...path].js
+
+      - name: Commit Steps 12-15 implementation
+        if: "github.event_name == 'push' && !contains(github.event.head_commit.message, '[steps-12-15-complete]')"
+        run: |
+          git config user.name "AstraCore Bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git diff --cached --quiet && exit 0
+          git commit -m "feat: complete steps 12-15 [steps-12-15-complete]"
+          git push
