@@ -58,7 +58,3 @@ insert into public.astracore_capabilities (id,name,group_name,icon,status,descri
 ('models','Model Center','AI','model','available','Manage AstraCore model profiles and checkpoints.',160),
 ('library','Knowledge Library','AI','library','planned','Searchable user-owned knowledge and source files.',170)
 on conflict (id) do update set name=excluded.name,group_name=excluded.group_name,icon=excluded.icon,status=excluded.status,description=excluded.description,sort_order=excluded.sort_order,updated_at=now();
-
-insert into public.astracore_release_sync (git_sha,git_message,supabase_migration,vercel_status,vercel_note)
-values ('5068aa5772a7a1c476bcead66ee2e89f1fe581f8','test: validate AstraCore capability manifest','astracore_capabilities_and_release_sync','rate_limited','Vercel deployment is currently rate limited; retry after the provider limit resets.')
-on conflict (git_sha) do update set supabase_migration=excluded.supabase_migration,vercel_status=excluded.vercel_status,vercel_note=excluded.vercel_note,updated_at=now();
