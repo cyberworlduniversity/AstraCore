@@ -25,12 +25,12 @@ def test_model_forward_dimensions_and_loss():
 
 
 def test_generation_is_bounded():
-    from model.generate import generate_text
+    from model.generate import generate
     tok = AstraTokenizer.build(["AstraCore is a local neural language model."], vocab_size=128)
     cfg = ModelConfig(vocab_size=tok.vocab_size, context_length=32, embedding_dimension=32,
                       number_of_layers=2, attention_heads=4, feed_forward_dimension=64)
     model = AstraCoreLM(cfg).eval()
     torch.manual_seed(42)
-    text = generate_text(model, tok, "AstraCore", max_new_tokens=8, temperature=0.8, top_k=8)
+    text = generate(model, tok, "AstraCore", max_new_tokens=8, temperature=0.8, top_k=8)
     assert isinstance(text, str)
     assert len(tok.encode(text, add_bos=False, add_eos=False)) <= 64
