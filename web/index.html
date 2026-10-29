@@ -7,6 +7,7 @@
 <meta name="description" content="AstraCore — self-owned local-first neural AI workspace.">
 <title>AstraCore — Local AI Workspace</title>
 <link rel="stylesheet" href="/web/styles.css">
+<link rel="stylesheet" href="/web/settings.css">
 </head>
 <body>
 <div class="app-shell">
@@ -94,7 +95,32 @@
       <section id="view-models" class="view"><div class="section-head"><div><h2>Model center</h2><p>Administrator-only model details.</p></div></div><div class="model-grid" id="modelGrid"></div></section>
       <section id="view-compare" class="view"><div class="section-head"><div><h2>Dual Model Studio</h2><p>Administrator-only A/B model testing.</p></div></div><div class="compare-toolbar"><textarea id="comparePrompt" rows="3" placeholder="Enter a prompt…"></textarea><button class="primary-btn" id="runCompare">Compare A + B</button></div><div class="dual-grid"><article class="dual-card"><header><b>AstraCore Neural A</b></header><pre id="compareA">Waiting…</pre></article><article class="dual-card"><header><b>AstraCore Neural B</b></header><pre id="compareB">Waiting…</pre></article></div></section>
       <section id="view-history" class="view"><div class="section-head"><div><h2>History</h2><p>Your conversations are stored in AstraCore's Supabase database.</p></div></div><div id="historyList" class="history-list"></div></section>
-      <section id="view-settings" class="view"><div class="section-head"><div><h2>Settings</h2><p>Configure the local AstraCore API endpoint.</p></div></div><div class="settings-page"><label>API base URL<input id="apiBasePage" type="url" placeholder="Leave empty for /api"></label><div class="settings-row"><span>Model status</span><b id="pageDialogStatus">Checking…</b></div><div class="settings-row"><span>Attachments</span><b>Local preview ready</b></div><div class="tool-row"><button class="primary-btn" id="saveSettings">Save settings</button><button class="ghost-btn" id="resetApiPage">Reset</button></div></div></section>
+
+      <section id="view-settings" class="view">
+        <div class="section-head"><div><h2>Settings</h2><p>A full AstraCore control center for your own AI workspace.</p></div></div>
+        <div class="settings-shell">
+          <nav class="settings-nav" aria-label="Settings categories">
+            <button type="button" data-settings="general">General</button>
+            <button type="button" data-settings="personalization">Personalization</button>
+            <button type="button" data-settings="model">Model & AI</button>
+            <button type="button" data-settings="files">Files & Studio</button>
+            <button type="button" data-settings="privacy">Data & Privacy</button>
+            <button type="button" data-settings="notifications">Notifications</button>
+            <button type="button" data-settings="connections">Connections</button>
+            <button type="button" data-settings="security">Security</button>
+            <button type="button" data-settings="accessibility">Accessibility</button>
+            <button type="button" data-settings="about">About</button>
+            <div class="settings-nav-note">Settings are local preferences unless a control explicitly says server/account.</div>
+          </nav>
+          <div id="settingsPanels"></div>
+        </div>
+        <div class="settings-page" style="margin-top:16px">
+          <label>API base URL<input id="apiBasePage" type="url" placeholder="Leave empty for /api"></label>
+          <div class="settings-row"><span>Model status</span><b id="pageDialogStatus">Checking…</b></div>
+          <div class="settings-row"><span>Attachments</span><b>Local preview ready</b></div>
+          <div class="tool-row"><button class="primary-btn" id="saveSettings">Save settings</button><button class="ghost-btn" id="resetApiPage">Reset API</button></div>
+        </div>
+      </section>
     </main>
 
     <div id="attachmentTray" class="attachment-tray" hidden></div>
@@ -123,5 +149,6 @@
 
 <script src="/web/auth.js"></script>
 <script type="module" src="/web/app.js"></script>
+<script src="/web/settings.js"></script>
 </body>
 </html>
