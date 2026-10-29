@@ -28,5 +28,8 @@ jobs:
       - name: Run test suite
         run: npm test
 
-      - name: Syntax check server
-        run: node --check server/server.js
+      - name: Syntax check runtime files
+        run: |
+          node --check server/server.js
+          node --check server/auth.js
+          node --check api/[...path].js
