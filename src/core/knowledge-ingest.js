@@ -29,7 +29,7 @@ export function validateDocumentInput({ name, content, type = '' }) {
   return { ok: true, name: safeName, ext, type: type || `text/${ext}` };
 }
 
-async function persistExtractedDocument(request, { userId, name, content, type, tags = [], segments = [], extraction = {} } = {}) {
+async function persistExtractedDocument(request, { userId, name, content, type, tags = [], segments = [], extraction = {}, embedder = null } = {}) {
   const validation = validateDocumentInput({ name, content, type });
   if (!validation.ok) throw Object.assign(new Error(validation.reason), { status: 415 });
   const text = String(content).replace(/\r\n/g, '\n').trim();
@@ -64,7 +64,13 @@ async function persistExtractedDocument(request, { userId, name, content, type, 
         rows.push({ document_id: document.id, user_id: userId, chunk_index: chunkIndex++, content: chunk, language, page_number: Number.isInteger(segment.page) ? segment.page : null, metadata: { source: validation.name, content_hash: hash, locator: segment.locator || null, extraction_method: extraction.method || 'text', ocr: Boolean(extraction.ocr) } });
       }
     }
-    if (rows.length) await request('/rest/v1/astracore_knowledge_chunks', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(rows) });
+    if (rows.length) {
+      if (typeof embedder === 'function') {
+        const vectors = await embedder(rows.map((row) => row.content));
+        if (Array.isArray(vectors) && vectors.length === rows.length) rows.forEach((row, i) => { if (Array.isArray(vectors[i]) && vectors[i].length === 384) row.embedding = vectors[i]; });
+      }
+      await request('/rest/v1/astracore_knowledge_chunks', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(rows) });
+    }
     await request(`/rest/v1/astracore_knowledge_documents?id=eq.${encodeURIComponent(document.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ status: 'indexed', updated_at: new Date().toISOString(), page_count: Math.max(0, ...normalizedSegments.map((s) => Number(s.page) || 0)) || null, metadata: { original_type: validation.type, extracted: true, extraction_method: extraction.method || 'text', ocr: Boolean(extraction.ocr), segment_count: normalizedSegments.length, chunk_count: rows.length, content_chars: text.length } }) });
     await request(`/rest/v1/astracore_knowledge_sources?id=eq.${encodeURIComponent(source.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ last_synced_at: new Date().toISOString() }) });
     return { duplicate: false, document: { id: document.id, title: document.title, document_type: document.document_type, language, content_hash: hash, status: 'indexed' }, chunks: rows.length, extraction: { method: extraction.method || 'text', ocr: Boolean(extraction.ocr), segments: normalizedSegments.length } };

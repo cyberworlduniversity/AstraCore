@@ -1,8 +1,9 @@
 export class KnowledgeRouter {
   constructor({ request }) { this.request = request; }
-  async search(query, { limit = 8 } = {}) {
+  async search(query, { limit = 8, queryEmbedding = null } = {}) {
     const safeLimit = Math.min(Math.max(Number(limit) || 8, 1), 20);
-    return this.request('/rest/v1/rpc/search_astracore_knowledge', { method:'POST', headers:{Prefer:'return=representation'}, body:JSON.stringify({search_query:String(query).slice(0,2000),query_embedding:null,result_limit:safeLimit}) });
+    const embedding = Array.isArray(queryEmbedding) && queryEmbedding.length === 384 ? queryEmbedding : null;
+    return this.request('/rest/v1/rpc/search_astracore_knowledge', { method:'POST', headers:{Prefer:'return=representation'}, body:JSON.stringify({search_query:String(query).slice(0,2000),query_embedding:embedding,result_limit:safeLimit}) });
   }
 }
 export function chunkText(text,{size=1200,overlap=180}={}) {

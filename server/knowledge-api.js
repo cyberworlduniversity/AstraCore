@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { ingestTextDocument, ingestExtractedDocument } from '../src/core/knowledge-ingest.js';
 import { KnowledgeRouter } from '../src/core/knowledge.js';
+import { createEmbeddingService } from './embedding-service.js';
 
 const MAX_UPLOAD_BODY = 11_500_000;
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
@@ -31,6 +32,7 @@ function runExtractor(payload) {
 export async function knowledgeRoute({ req, res, url, user, readBody, json, supabaseUserRequest }) {
   if (!url.pathname.startsWith('/api/knowledge')) return false;
   const request = (path, options = {}) => supabaseUserRequest(req, path, options);
+  const embedder = createEmbeddingService();
 
   if (req.method === 'POST' && url.pathname === '/api/knowledge/upload') {
     const raw = await readBody(req, MAX_UPLOAD_BODY);
@@ -41,7 +43,7 @@ export async function knowledgeRoute({ req, res, url, user, readBody, json, supa
     const tags = Array.isArray(body.tags) ? body.tags : [];
 
     if (typeof body.content === 'string') {
-      const result = await ingestTextDocument(request, { userId: user.id, name, content: body.content, type: body.type, tags });
+      const result = await ingestTextDocument(request, { userId: user.id, name, content: body.content, type: body.type, tags, embedder });
       return json(res, result.duplicate ? 200 : 201, { ok: true, ...result });
     }
 
@@ -51,7 +53,7 @@ export async function knowledgeRoute({ req, res, url, user, readBody, json, supa
     if (byteLength > MAX_FILE_BYTES) return json(res, 413, { error: `File exceeds the ${MAX_FILE_BYTES / 1024 / 1024} MB limit.` });
     const extracted = await runExtractor({ name, data: body.data });
     const content = extracted.segments.map((s) => s.text).join('\n\n').trim();
-    const result = await ingestExtractedDocument(request, { userId: user.id, name, content, type: body.type, tags, segments: extracted.segments, extraction: { method: `python:${String(name).split('.').pop().toLowerCase()}`, ocr: false } });
+    const result = await ingestExtractedDocument(request, { userId: user.id, name, content, type: body.type, tags, embedder, segments: extracted.segments, extraction: { method: `python:${String(name).split('.').pop().toLowerCase()}`, ocr: false } });
     return json(res, result.duplicate ? 200 : 201, { ok: true, ...result });
   }
 
@@ -62,7 +64,8 @@ export async function knowledgeRoute({ req, res, url, user, readBody, json, supa
     const query = typeof body.query === 'string' ? body.query.trim() : '';
     if (!query) return json(res, 400, { error: 'query is required' });
     const router = new KnowledgeRouter({ request });
-    const results = await router.search(query, { limit: Math.min(Math.max(Number(body.limit) || 8, 1), 20) });
+    const queryEmbedding = await embedder([query]);
+    const results = await router.search(query, { queryEmbedding: queryEmbedding?.[0] || null, limit: Math.min(Math.max(Number(body.limit) || 8, 1), 20) });
     return json(res, 200, { query, results, count: results.length });
   }
 
