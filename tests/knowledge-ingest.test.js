@@ -9,10 +9,10 @@ test('knowledge ingestion accepts supported text documents', () => {
   assert.equal(result.ext, 'md');
 });
 
-test('knowledge ingestion rejects binary formats until extraction is implemented', () => {
-  const result = validateDocumentInput({ name: 'chapter.pdf', content: 'pretend extracted text' });
-  assert.equal(result.ok, false);
-  assert.match(result.reason, /NOT IMPLEMENTED/);
+test('knowledge ingestion accepts extracted PDF text', () => {
+  const result = validateDocumentInput({ name: 'chapter.pdf', content: 'Extracted chapter text.' });
+  assert.equal(result.ok, true);
+  assert.equal(result.ext, 'pdf');
 });
 
 test('knowledge ingestion rejects empty documents', () => {
