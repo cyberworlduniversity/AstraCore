@@ -3,7 +3,7 @@ export const SOURCE_TYPES = Object.freeze({
   SHAREPOINT: 'sharepoint', BLOB: 'blob', ONELAKE: 'onelake', MCP: 'mcp', USER: 'user_knowledge'
 });
 
-export function sourceRecord(row, score = 0) {
+export function sourceRecord(row, score = undefined) {
   return {
     source_id: row.document_id || row.chunk_id || row.id,
     title: row.title || row.source || 'Unknown source',
