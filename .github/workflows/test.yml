@@ -14,8 +14,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Install Node dependencies
         run: npm install
+      - name: Validate Python extractor
+        run: python -m py_compile scripts/document_extract.py
       - name: Run Node tests
         run: npm test
       - name: Validate server syntax
