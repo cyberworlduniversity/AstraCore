@@ -27,7 +27,12 @@ jobs:
 
       - name: Apply Steps 12-15 implementation
         if: "!contains(github.event.head_commit.message, '[steps-12-15-complete]')"
-        run: python3 scripts/apply_steps_12_15.py
+        run: |
+          if [ -f server/embedding-service.js ]; then
+            echo "Steps 12-15 source integration already present"
+          else
+            python3 scripts/apply_steps_12_15.py
+          fi
 
       - name: Run test suite
         run: npm test
