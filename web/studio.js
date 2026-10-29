@@ -1,0 +1,69 @@
+(() => {
+  const $ = id => document.getElementById(id);
+  const state = { file: null, image: null, rotation: 0, filter: 'original', crop: null };
+  const filters = {
+    original: 'none',
+    grayscale: 'grayscale(1)',
+    contrast: 'contrast(1.25)',
+    sharpen: 'contrast(1.12) saturate(1.08)'
+  };
+  function toast(text){
+    const old=document.querySelector('.studio-toast'); if(old) old.remove();
+    const el=document.createElement('div'); el.className='studio-toast'; el.textContent=text;
+    document.body.appendChild(el); setTimeout(()=>el.remove(),1800);
+  }
+  function activate(){
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active-view'));
+    const view=$('view-studio'); if(view)view.classList.add('active-view');
+    document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view==='studio'));
+    const title=$('pageTitle'); if(title)title.textContent='Scan & Editor Studio';
+    const side=$('sidebar'); if(side)side.classList.remove('open');
+  }
+  function draw(){
+    const canvas=$('studioCanvas'), img=state.image; if(!canvas||!img)return;
+    const ctx=canvas.getContext('2d'); const max=900; const scale=Math.min(max/img.naturalWidth,max/img.naturalHeight,1);
+    const w=Math.max(1,Math.round(img.naturalWidth*scale)), h=Math.max(1,Math.round(img.naturalHeight*scale));
+    const rotated=state.rotation%180!==0; canvas.width=rotated?h:w; canvas.height=rotated?w:h;
+    ctx.save(); ctx.translate(canvas.width/2,canvas.height/2); ctx.rotate(state.rotation*Math.PI/180); ctx.filter=filters[state.filter]||'none';
+    ctx.drawImage(img,-w/2,-h/2,w,h); ctx.restore();
+    $('studioDimensions').textContent=`${img.naturalWidth} × ${img.naturalHeight}px`;
+  }
+  function loadImage(file){
+    if(!file||!file.type.startsWith('image/'))return;
+    state.file=file; const img=new Image(); img.onload=()=>{state.image=img;state.rotation=0;state.filter='original';draw();$('studioEmpty').hidden=true;$('studioCanvasWrap').hidden=false;$('studioControls').hidden=false;$('studioFileName').textContent=file.name;};
+    img.src=URL.createObjectURL(file);
+  }
+  function downloadImage(){
+    const canvas=$('studioCanvas'); if(!canvas||!state.image)return;
+    const a=document.createElement('a'); a.download=(state.file?.name||'astracore-image').replace(/\.[^.]+$/,'')+'-edited.png'; a.href=canvas.toDataURL('image/png'); a.click(); toast('Edited image exported');
+  }
+  function resetImage(){if(!state.image)return;state.rotation=0;state.filter='original';draw();document.querySelectorAll('[data-studio-filter]').forEach(b=>b.classList.toggle('active',b.dataset.studioFilter==='original'));}
+  async function openDocument(file){
+    state.file=file; $('studioFileName').textContent=file.name; $('studioEmpty').hidden=true; $('studioCanvasWrap').hidden=true; $('studioControls').hidden=true; $('documentPanel').hidden=false;
+    const preview=$('documentPreview'); preview.replaceChildren();
+    const meta=document.createElement('div'); meta.className='studio-file-meta'; meta.textContent=`${file.name} · ${file.type||'unknown type'} · ${Math.round(file.size/1024)} KB`; preview.appendChild(meta);
+    if(file.type==='application/pdf'||file.name.toLowerCase().endsWith('.pdf')){
+      const iframe=document.createElement('iframe'); iframe.className='studio-pdf'; iframe.src=URL.createObjectURL(file); iframe.title='PDF preview'; preview.appendChild(iframe); return;
+    }
+    if(file.type.startsWith('text/')||/\.(txt|md|csv|json|xml|html|css|js|py|log)$/i.test(file.name)){
+      const pre=document.createElement('pre'); pre.className='studio-text'; pre.textContent=await file.text(); preview.appendChild(pre); return;
+    }
+    const note=document.createElement('div'); note.className='studio-help'; note.textContent='This file is ready for the AstraCore document pipeline. Browser preview is not available for this format yet; the original file remains local to this workspace.'; preview.appendChild(note);
+  }
+  function handleFiles(files){const file=files?.[0];if(!file)return;if(file.type.startsWith('image/'))loadImage(file);else openDocument(file)}
+  function bind(){
+    document.querySelectorAll('[data-studio-nav]').forEach(b=>b.addEventListener('click',activate));
+    $('studioOpenBtn')?.addEventListener('click',()=>$('studioFileInput').click());
+    $('studioCameraBtn')?.addEventListener('click',()=>$('studioCameraInput').click());
+    $('studioFileInput')?.addEventListener('change',e=>{handleFiles(e.target.files);e.target.value=''});
+    $('studioCameraInput')?.addEventListener('change',e=>{handleFiles(e.target.files);e.target.value=''});
+    $('studioExport')?.addEventListener('click',downloadImage); $('studioReset')?.addEventListener('click',resetImage);
+    $('studioRotate')?.addEventListener('click',()=>{if(state.image){state.rotation=(state.rotation+90)%360;draw()}});
+    document.querySelectorAll('[data-studio-filter]').forEach(b=>b.addEventListener('click',()=>{state.filter=b.dataset.studioFilter;document.querySelectorAll('[data-studio-filter]').forEach(x=>x.classList.toggle('active',x===b));draw()}));
+    $('studioCloseDoc')?.addEventListener('click',()=>{$('documentPanel').hidden=true;$('studioEmpty').hidden=false;state.file=null});
+    $('studioDrop')?.addEventListener('dragover',e=>{e.preventDefault();$('studioDrop').classList.add('dragover')});
+    $('studioDrop')?.addEventListener('dragleave',()=>$('studioDrop').classList.remove('dragover'));
+    $('studioDrop')?.addEventListener('drop',e=>{e.preventDefault();$('studioDrop').classList.remove('dragover');handleFiles(e.dataTransfer.files)});
+  }
+  window.addEventListener('DOMContentLoaded',bind);
+})();
