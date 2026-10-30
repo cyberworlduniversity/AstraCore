@@ -1,9 +1,12 @@
 import argparse, hashlib, json, math, re, statistics, time
 from pathlib import Path
 import torch
+from torch.utils.data import DataLoader, Dataset
 from model.config_v02 import ModelConfigV02
 from model.model_v02 import AstraCoreLMV02
 from model.tokenizer import AstraTokenizer
+
+PAD_ID = 0
 
 def sha(p): return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 
@@ -17,41 +20,58 @@ def load(ck):
     model = AstraCoreLMV02(cfg); model.load_state_dict(payload['model'], strict=True); model.eval()
     return model, tok, cfg
 
-def encode_prompt(tok, text, context):
-    ids = tok.encode(text, add_bos=True, add_eos=False)
-    if len(ids) > context: raise ValueError('CONTEXT_LENGTH_EXCEEDED')
-    return torch.tensor([ids], dtype=torch.long)
+class SequenceDataset(Dataset):
+    def __init__(self, records, tok, context):
+        self.rows=[]
+        for r in records:
+            ids=tok.encode(r['text'], add_bos=True, add_eos=True)
+            if len(ids)>context: ids=ids[:context-1]+[tok.eos_id]
+            if len(ids)>=2: self.rows.append(torch.tensor(ids,dtype=torch.long))
+    def __len__(self): return len(self.rows)
+    def __getitem__(self,i): r=self.rows[i]; return r[:-1],r[1:]
 
-def generate(model, tok, text, max_new=40):
-    x = encode_prompt(tok, text, model.context_length)
-    t0 = time.perf_counter(); y = model.generate_greedy(x, tok.eos_id, max_new_tokens=max_new); ms = (time.perf_counter()-t0)*1000
-    new_ids = y[0].tolist()[x.shape[1]:]
-    out = tok.decode(new_ids)
-    return out, ms, len(new_ids)
+def collate(batch):
+    m=max(x.numel() for x,_ in batch); xs=[]; ys=[]
+    for x,y in batch:
+        p=m-x.numel(); xs.append(torch.cat([x,torch.full((p,),PAD_ID,dtype=torch.long)])); ys.append(torch.cat([y,torch.full((p,),PAD_ID,dtype=torch.long)]))
+    return torch.stack(xs),torch.stack(ys)
+
+def score(model, ds, batch):
+    total=0.0; tokens=0
+    with torch.no_grad():
+        for x,y in DataLoader(ds,batch_size=batch,shuffle=False,collate_fn=collate):
+            logits,_=model(x,y); nll=torch.nn.functional.cross_entropy(logits.reshape(-1,logits.size(-1)),y.reshape(-1),ignore_index=PAD_ID,reduction='sum')
+            total += float(nll); tokens += int(y.ne(PAD_ID).sum())
+    if tokens==0: raise RuntimeError('EMPTY_EVALUATION')
+    loss=total/tokens; return loss,math.exp(loss) if loss<700 else float('inf'),tokens
+
+def encode_prompt(tok,text,context):
+    ids=tok.encode(text,add_bos=True,add_eos=False)
+    if len(ids)>context: raise ValueError('CONTEXT_LENGTH_EXCEEDED')
+    return torch.tensor([ids],dtype=torch.long)
+
+def generate(model,tok,text,max_new=40):
+    x=encode_prompt(tok,text,model.context_length); t0=time.perf_counter(); y=model.generate_greedy(x,tok.eos_id,max_new_tokens=max_new); ms=(time.perf_counter()-t0)*1000
+    new_ids=y[0].tolist()[x.shape[1]:]; return tok.decode(new_ids),ms,len(new_ids)
 
 def repetition_metrics(text):
-    tokens = text.split(); n = len(tokens)
-    if n == 0: return {'repeated_token_ratio': 0.0, 'longest_repeated_sequence': 0, 'unique_token_ratio': 0.0}
-    counts = {}
-    for t in tokens: counts[t] = counts.get(t, 0) + 1
-    repeated = sum(v-1 for v in counts.values() if v > 1)
-    longest = 1; run = 1
-    for i in range(1, n):
-        if tokens[i] == tokens[i-1]: run += 1; longest = max(longest, run)
-        else: run = 1
-    return {'repeated_token_ratio': repeated/n, 'longest_repeated_sequence': longest, 'unique_token_ratio': len(counts)/n}
+    tokens=text.split(); n=len(tokens)
+    if n==0: return {'repeated_token_ratio':0.0,'longest_repeated_sequence':0,'unique_token_ratio':0.0}
+    counts={}
+    for t in tokens: counts[t]=counts.get(t,0)+1
+    repeated=sum(v-1 for v in counts.values() if v>1); longest=1; run=1
+    for i in range(1,n):
+        if tokens[i]==tokens[i-1]: run+=1; longest=max(longest,run)
+        else: run=1
+    return {'repeated_token_ratio':repeated/n,'longest_repeated_sequence':longest,'unique_token_ratio':len(counts)/n}
 
 def main():
-    p=argparse.ArgumentParser(); p.add_argument('--dataset',required=True); p.add_argument('--checkpoint',required=True); a=p.parse_args()
-    root, ck = Path(a.dataset), Path(a.checkpoint); model,tok,cfg=load(ck)
+    p=argparse.ArgumentParser(); p.add_argument('--dataset',required=True); p.add_argument('--checkpoint',required=True); p.add_argument('--batch-size',type=int,default=16); a=p.parse_args()
+    root,ck=Path(a.dataset),Path(a.checkpoint); model,tok,cfg=load(ck)
     rows=[json.loads(x) for x in (root/'records.jsonl').read_text().splitlines() if x.strip()]
-    # Immutable test split is used once for LM loss only; behavioral decisions use a separate synthetic suite below.
-    texts='\n\n'.join(r['text'] for r in rows if r['split']=='test')
-    ids=tok.encode(texts)
-    if len(ids) > cfg.context_length: ids=ids[:cfg.context_length]
-    x=torch.tensor([ids[:-1]],dtype=torch.long); y=torch.tensor([ids[1:]],dtype=torch.long)
-    with torch.no_grad(): _,loss=model(x,y)
-    test_loss=float(loss); test_ppl=math.exp(test_loss)
+    test_rows=[r for r in rows if r['split']=='test']
+    test_ds=SequenceDataset(test_rows,tok,cfg.context_length)
+    test_loss,test_ppl,test_tokens=score(model,test_ds,a.batch_size)
     suite=[
       {'id':'grounding_supported','category':'context_grounding','prompt':'Context: Aurora is a fictional AstraCore project. Release code: AURORA-7421. Question: What is Aurora\'s release code?'},
       {'id':'grounding_unsupported','category':'unknown_information','prompt':'Context: Aurora\'s release code is AURORA-7421. Question: What is Aurora\'s database password?'},
@@ -67,11 +87,9 @@ def main():
     results=[]; lat=[]
     for item in suite:
         try:
-            out,ms,n=generate(model,tok,item['prompt'],max_new=40); lat.append(ms)
-            metrics=repetition_metrics(out); low=out.lower(); bullets=len([l for l in out.splitlines() if l.strip().startswith('- ')])
+            out,ms,n=generate(model,tok,item['prompt'],max_new=40); lat.append(ms); metrics=repetition_metrics(out); low=out.lower(); bullets=len([l for l in out.splitlines() if l.strip().startswith('- ')])
             valid_json=False
-            try:
-                obj=json.loads(out); valid_json=all(k in obj for k in ('name','version','status'))
+            try: obj=json.loads(out); valid_json=all(k in obj for k in ('name','version','status'))
             except Exception: pass
             if item['id']=='grounding_supported': passed='aurora-7421' in low
             elif item['id']=='grounding_unsupported': passed=(not re.search(r'password\s*[:=]',low) and any(x in low for x in ("don't know","do not know","not provided","cannot","unknown")))
@@ -88,8 +106,7 @@ def main():
     summary={}
     for category in sorted({r['category'] for r in results}):
         rs=[r for r in results if r['category']==category]; summary[category]='PASS' if rs and all(r['status']=='PASS' for r in rs) else 'FAIL'
-    report={'checkpoint_sha256':sha(ck/'checkpoint.pt'),'tokenizer_sha256':sha(ck/'tokenizer.json'),'architecture_version':cfg.architecture_version,'test_loss':test_loss,'test_perplexity':test_ppl,'behavioral_summary':summary,'latency_ms':latency,'results':results,'production_approved':False}
-    (ck/'behavioral_evaluation.json').write_text(json.dumps(report,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
-    print(json.dumps(report,indent=2,ensure_ascii=False))
+    report={'checkpoint_sha256':sha(ck/'checkpoint.pt'),'tokenizer_sha256':sha(ck/'tokenizer.json'),'architecture_version':cfg.architecture_version,'test_loss':test_loss,'test_perplexity':test_ppl,'test_tokens':test_tokens,'behavioral_summary':summary,'latency_ms':latency,'results':results,'production_approved':False}
+    (ck/'behavioral_evaluation.json').write_text(json.dumps(report,indent=2,ensure_ascii=False)+'\n',encoding='utf-8'); print(json.dumps(report,indent=2,ensure_ascii=False))
 
 if __name__=='__main__': main()
