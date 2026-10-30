@@ -1,0 +1,13 @@
+{
+  "model": "AstraCoreLM",
+  "status": "BLOCKED",
+  "dataset_version": "1.0.0",
+  "train_records": 1008,
+  "validation_records": 108,
+  "test_records": 120,
+  "validation_loss": 10.0984,
+  "validation_perplexity": 24304.37,
+  "test_loss": 10.1959,
+  "test_perplexity": 26792.99,
+  "assessment": "Genuine trained model, but quality is experimental and not suitable for production promotion. No frontier-model equivalence claimed."
+}
