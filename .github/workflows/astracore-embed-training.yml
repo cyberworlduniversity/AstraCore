@@ -15,6 +15,9 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHONPATH: .
+
 jobs:
   train-and-evaluate:
     runs-on: ubuntu-latest
@@ -22,18 +25,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Install Python dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
-
       - name: Validate semantic dataset
         run: python scripts/validate_embedding_dataset.py --data datasets/astracore-embed-v0.1-bootstrap.jsonl
-
       - name: Train AstraCoreEmbed v0.1
         run: >-
           python scripts/train_embeddings.py
@@ -47,7 +46,6 @@ jobs:
           --batch-size 8
           --lr 2e-4
           --seed 42
-
       - name: Evaluate checkpoint
         run: >-
           python scripts/evaluate_embeddings.py
@@ -56,7 +54,6 @@ jobs:
           --validation-ratio 0.2
           --seed 42
           | tee artifacts/astracore-embed-v0.1/evaluation.json
-
       - name: Verify checkpoint completeness
         run: |
           test -s artifacts/astracore-embed-v0.1/model.pt
@@ -76,7 +73,6 @@ jobs:
           print('AstraCoreEmbed checkpoint gate: PASS')
           print(json.dumps(evaluation, indent=2))
           PY
-
       - name: Upload trained checkpoint artifact
         uses: actions/upload-artifact@v4
         with:
