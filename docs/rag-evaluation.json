@@ -1,5 +1,19 @@
 {
-  "status": "BLOCKED",
-  "implemented": ["hybrid keyword/vector retrieval", "RLS-scoped knowledge search", "untrusted-evidence prompt isolation", "source metadata propagation"],
-  "missing_release_evidence": ["authenticated live ingestion-to-answer E2E", "groundedness measurement", "citation correctness measurement", "real test-document answer verification"]
+  "status": "NOT_CERTIFIED",
+  "tests_run": 0,
+  "tests_passed": 0,
+  "tests_failed": 0,
+  "implemented": ["hybrid keyword/vector retrieval", "owner-scoped security-invoker RPC", "untrusted-evidence prompt isolation", "source metadata propagation", "384D query embedding path"],
+  "required_cases": {
+    "exact_fact": "NOT_EXECUTED",
+    "semantic_retrieval": "NOT_EXECUTED",
+    "missing_information": "NOT_EXECUTED",
+    "conflicting_documents": "NOT_EXECUTED",
+    "irrelevant_documents": "NOT_EXECUTED",
+    "malicious_document": "NOT_EXECUTED",
+    "citation_correctness": "NOT_EXECUTED",
+    "user_isolation": "NOT_EXECUTED"
+  },
+  "metrics": {"recall_at_1": null,"recall_at_5": null,"recall_at_10": null,"mrr": null,"precision": null,"groundedness": null,"citation_accuracy": null,"unsupported_claim_rate": null,"retrieval_latency_ms": null,"total_response_latency_ms": null},
+  "blockers": ["No authenticated live ingestion-to-answer execution evidence is available in the connected environment."]
 }
