@@ -1,13 +1,13 @@
-name: AstraCoreLM v0.1 Training
+name: AstraCoreLM v1.0 Training
 
 on:
   push:
     branches: [main]
     paths:
-      - 'datasets/astracore-lm-v0.1/**'
+      - 'datasets/**'
       - 'model/**'
+      - 'scripts/generate_lm_dataset.py'
       - 'scripts/train_lm.py'
-      - 'scripts/evaluate_lm.py'
       - 'requirements.txt'
       - '.github/workflows/astracore-lm-training.yml'
   workflow_dispatch:
@@ -29,46 +29,59 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
-      - name: Train AstraCoreLM v0.1
+      - name: Generate approved original dataset
+        run: python scripts/generate_lm_dataset.py --output datasets/astracore-lm-v1.0 --seed 42
+      - name: Validate dataset counts
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          m=json.loads(Path('datasets/astracore-lm-v1.0/metadata.json').read_text())
+          assert m['train_count'] >= 1000, m
+          assert m['validation_count'] >= 100, m
+          assert m['test_count'] >= 100, m
+          assert m['license'] == 'CC0-1.0', m
+          print(json.dumps(m, indent=2))
+          PY
+      - name: Train AstraCoreLM v1.0
         run: >-
           python scripts/train_lm.py
-          --corpus datasets/astracore-lm-v0.1
-          --output artifacts/astracore-lm-v0.1
-          --vocab-size 2048
+          --corpus datasets/astracore-lm-v1.0
+          --output artifacts/astracore-lm-v1.0
+          --vocab-size 4096
           --context-length 128
           --embedding-dimension 128
           --layers 4
           --heads 4
-          --epochs 3
-          --batch-size 4
+          --epochs 5
+          --batch-size 8
           --lr 3e-4
           --seed 42
-      - name: Evaluate checkpoint
+      - name: Evaluate held-out validation and test evidence
         run: |
-          python scripts/evaluate_lm.py --checkpoint artifacts/astracore-lm-v0.1 --text datasets/astracore-lm-v0.1/train.txt | tee artifacts/astracore-lm-v0.1/evaluation.json
-      - name: Verify checkpoint gate
-        run: |
-          test -s artifacts/astracore-lm-v0.1/model.pt
-          test -s artifacts/astracore-lm-v0.1/config.json
-          test -s artifacts/astracore-lm-v0.1/tokenizer.json
-          test -s artifacts/astracore-lm-v0.1/training_state.json
-          test -s artifacts/astracore-lm-v0.1/corpus_manifest.json
+          cat artifacts/astracore-lm-v1.0/test_evaluation.json
           python - <<'PY'
-          import json
+          import json, math
           from pathlib import Path
-          root=Path('artifacts/astracore-lm-v0.1')
-          state=json.loads((root/'training_state.json').read_text())
-          evaluation=json.loads((root/'evaluation.json').read_text())
-          assert state.get('status') == 'trained', state
-          assert evaluation.get('validation_loss') is not None, evaluation
-          assert evaluation.get('perplexity') is not None, evaluation
-          print('AstraCoreLM checkpoint gate: PASS')
-          print(json.dumps(evaluation, indent=2))
+          state=json.loads(Path('artifacts/astracore-lm-v1.0/training_state.json').read_text())
+          ev=json.loads(Path('artifacts/astracore-lm-v1.0/test_evaluation.json').read_text())
+          assert state['status']=='trained', state
+          assert state['dataset']['validation_documents'] >= 100, state
+          assert math.isfinite(ev['validation_perplexity']), ev
+          assert math.isfinite(ev['test_perplexity']), ev
+          print('AstraCoreLM v1.0 evidence gate: PASS')
           PY
+      - name: Verify checkpoint artifacts
+        run: |
+          test -s artifacts/astracore-lm-v1.0/model.pt
+          test -s artifacts/astracore-lm-v1.0/config.json
+          test -s artifacts/astracore-lm-v1.0/tokenizer.json
+          test -s artifacts/astracore-lm-v1.0/training_state.json
+          test -s artifacts/astracore-lm-v1.0/test_evaluation.json
       - name: Upload checkpoint
         uses: actions/upload-artifact@v4
         with:
-          name: astracore-lm-v0.1-checkpoint
-          path: artifacts/astracore-lm-v0.1/
+          name: astracore-lm-v1.0-checkpoint
+          path: artifacts/astracore-lm-v1.0/
           if-no-files-found: error
           retention-days: 30
