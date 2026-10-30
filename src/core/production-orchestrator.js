@@ -11,7 +11,7 @@ function clampText(value, max) {
 }
 
 function sourceKey(source) {
-  return String(source?.chunkId || source?.documentId || source?.sourceId || source?.url || source?.title || 'unknown');
+  return String(source?.chunk_id || source?.chunkId || source?.document_id || source?.documentId || source?.source_id || source?.sourceId || source?.url || source?.title || 'unknown');
 }
 
 export function normalizeSources(sources = []) {
