@@ -6,6 +6,11 @@ function bodyJson(body) {
   try { return JSON.parse(body || '{}'); } catch { return null; }
 }
 function clampText(value, max) { return String(value ?? '').trim().slice(0, max); }
+function isoNow() { return new Date().toISOString(); }
+function activeMemoryFilter(userId) {
+  const now = encodeURIComponent(isoNow());
+  return `/rest/v1/astracore_memory_records?user_id=eq.${encodeURIComponent(userId)}&consent_revoked_at=is.null&or=(expires_at.is.null,expires_at.gt.${now})`;
+}
 
 export async function handleProductionRoute({ req, res, url, user, readBody, json, supabaseUserRequest }) {
   const path = url.pathname;
@@ -13,7 +18,7 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
 
   if (path === '/api/memory' && req.method === 'GET') {
     const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 20, 1), MAX_MEMORY);
-    const rows = await supabaseUserRequest(req, `/rest/v1/astracore_memory_records?select=memory_id,content,source,confidence,permission,expires_at,metadata,created_at,updated_at&user_id=eq.${encodeURIComponent(user.id)}&order=updated_at.desc&limit=${limit}`);
+    const rows = await supabaseUserRequest(req, `${activeMemoryFilter(user.id)}&select=memory_id,content,source,confidence,permission,expires_at,metadata,consent_granted_at,created_at,updated_at&order=updated_at.desc&limit=${limit}`);
     return json(res, 200, { memories: rows });
   }
 
@@ -26,15 +31,45 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
     const permission = body.permission === 'private' ? 'private' : 'user';
     const rows = await supabaseUserRequest(req, '/rest/v1/astracore_memory_records', {
       method: 'POST', headers: { Prefer: 'return=representation' },
-      body: JSON.stringify({ user_id: user.id, content, source: body.source || 'explicit', confidence: Math.min(Math.max(Number(body.confidence) || 1, 0), 1), permission, expires_at: body.expires_at || null, metadata: body.metadata && typeof body.metadata === 'object' ? body.metadata : {} })
+      body: JSON.stringify({ user_id: user.id, content, source: body.source || 'explicit', confidence: Math.min(Math.max(Number(body.confidence) || 1, 0), 1), permission, expires_at: body.expires_at || null, consent_granted_at: isoNow(), consent_revoked_at: null, metadata: body.metadata && typeof body.metadata === 'object' ? body.metadata : {} })
     });
     return json(res, 201, { memory: rows[0] || null });
+  }
+
+  if (path === '/api/memory/consent/revoke' && req.method === 'POST') {
+    await supabaseUserRequest(req, `/rest/v1/astracore_memory_records?user_id=eq.${encodeURIComponent(user.id)}&consent_revoked_at=is.null`, {
+      method: 'PATCH', headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({ consent_revoked_at: isoNow() })
+    });
+    return json(res, 200, { ok: true, memory_persistence: 'revoked' });
+  }
+
+  if (path.startsWith('/api/memory/') && req.method === 'PATCH') {
+    const id = path.split('/')[3];
+    if (!id) return json(res, 400, { error: 'memory id is required' });
+    const body = bodyJson(await readBody(req, 64 * 1024));
+    if (!body) return json(res, 400, { error: 'Invalid JSON' });
+    if (body.consent !== true) return json(res, 400, { error: 'Explicit memory consent is required for updates' });
+    const existing = await supabaseUserRequest(req, `${activeMemoryFilter(user.id)}&memory_id=eq.${encodeURIComponent(id)}&select=memory_id&limit=1`);
+    if (!existing[0]) return json(res, 404, { error: 'Memory not found' });
+    const patch = {};
+    if (body.content !== undefined) {
+      const content = clampText(body.content, MAX_MEMORY);
+      if (!content) return json(res, 400, { error: 'content cannot be empty' });
+      patch.content = content;
+    }
+    if (body.confidence !== undefined) patch.confidence = Math.min(Math.max(Number(body.confidence) || 0, 0), 1);
+    if (body.expires_at !== undefined) patch.expires_at = body.expires_at || null;
+    if (body.metadata !== undefined) patch.metadata = body.metadata && typeof body.metadata === 'object' ? body.metadata : {};
+    patch.consent_granted_at = isoNow();
+    const rows = await supabaseUserRequest(req, `/rest/v1/astracore_memory_records?memory_id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(patch) });
+    return json(res, 200, { memory: rows[0] || null });
   }
 
   if (path.startsWith('/api/memory/') && req.method === 'DELETE') {
     const id = path.split('/')[3];
     if (!id) return json(res, 400, { error: 'memory id is required' });
-    const rows = await supabaseUserRequest(req, `/rest/v1/astracore_memory_records?memory_id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(user.id)}&select=memory_id&limit=1`);
+    const rows = await supabaseUserRequest(req, `${activeMemoryFilter(user.id)}&memory_id=eq.${encodeURIComponent(id)}&select=memory_id&limit=1`);
     if (!rows[0]) return json(res, 404, { error: 'Memory not found' });
     await supabaseUserRequest(req, `/rest/v1/astracore_memory_records?memory_id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: 'DELETE' });
     return json(res, 200, { ok: true, memory_id: id });
@@ -42,7 +77,7 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
 
   if (path === '/api/tools' && req.method === 'GET') {
     const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 20, 1), MAX_TOOL_LIMIT);
-    const rows = await supabaseUserRequest(req, `/rest/v1/astracore_tool_registry?select=name,description,input_schema,output_schema,permissions,risk_level,timeout_ms,authentication_requirements,status,created_at,updated_at&order=name.asc&limit=${limit}`);
+    const rows = await supabaseUserRequest(req, `/rest/v1/astracore_tool_registry?select=name,description,input_schema,output_schema,permissions,risk_level,timeout_ms,authentication_requirements,status&order=name.asc&limit=${limit}`);
     return json(res, 200, { tools: rows });
   }
 
@@ -71,7 +106,7 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
     const requestedSteps = Array.isArray(body.steps) ? body.steps.slice(0, 8).map((step) => clampText(step, 500)).filter(Boolean) : [];
     const rows = await supabaseUserRequest(req, '/rest/v1/astracore_agent_runs', {
       method: 'POST', headers: { Prefer: 'return=representation' },
-      body: JSON.stringify({ user_id: user.id, status: 'planned', task, metadata: { steps: requestedSteps, created_by: 'api' } })
+      body: JSON.stringify({ user_id: user.id, status: 'planned', task, metadata: { steps: requestedSteps, created_by: 'api', execution_gated: true } })
     });
     return json(res, 202, { agent_run: rows[0] || null, execution: 'planned_only', message: 'Agent execution is gated until the selected tools are authorized and implemented.' });
   }
