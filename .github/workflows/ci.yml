@@ -37,6 +37,9 @@ jobs:
       - name: Run test suite
         run: npm test
 
+      - name: Run Python dataset validation tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
+
       - name: Syntax check runtime files
         run: |
           node --check server/server.js
