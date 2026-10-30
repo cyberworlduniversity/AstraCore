@@ -1,11 +1,12 @@
-name: AstraCoreEmbed v0.1 Training
+name: AstraCoreEmbed v1.0 Training
 
 on:
   push:
     branches: [main]
     paths:
-      - 'datasets/astracore-embed-v0.1-bootstrap.jsonl'
+      - 'datasets/**'
       - 'model/**'
+      - 'scripts/generate_embedding_benchmark.py'
       - 'scripts/train_embeddings.py'
       - 'scripts/evaluate_embeddings.py'
       - 'requirements.txt'
@@ -31,52 +32,60 @@ jobs:
           python-version: '3.11'
       - name: Install Python dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Generate 600-pair benchmark from approved original dataset
+        run: |
+          python scripts/generate_lm_dataset.py --output datasets/astracore-lm-v1.0 --seed 42
+          python scripts/generate_embedding_benchmark.py --input datasets/astracore-lm-v1.0/records.jsonl --output datasets/astracore-embed-v1.0.jsonl --pairs 600 --seed 42
       - name: Validate semantic dataset
-        run: python scripts/validate_embedding_dataset.py datasets/astracore-embed-v0.1-bootstrap.jsonl
-      - name: Train AstraCoreEmbed v0.1
+        run: python scripts/validate_embedding_dataset.py datasets/astracore-embed-v1.0.jsonl
+      - name: Train AstraCoreEmbed v1.0
         run: >-
           python scripts/train_embeddings.py
-          --data datasets/astracore-embed-v0.1-bootstrap.jsonl
-          --output artifacts/astracore-embed-v0.1
-          --dataset-name astracore-embed-v0.1-bootstrap
-          --dataset-version 0.1.0
-          --source user_authored_bootstrap
-          --license project-authored
+          --data datasets/astracore-embed-v1.0.jsonl
+          --output artifacts/astracore-embed-v1.0
+          --dataset-name astracore-embed-v1.0
+          --dataset-version 1.0.0
+          --source original-astracore-engineering-curriculum
+          --license CC0-1.0
           --epochs 5
-          --batch-size 8
+          --batch-size 16
           --lr 2e-4
           --seed 42
       - name: Evaluate checkpoint
         run: >-
           python scripts/evaluate_embeddings.py
-          --checkpoint artifacts/astracore-embed-v0.1
-          --data datasets/astracore-embed-v0.1-bootstrap.jsonl
+          --checkpoint artifacts/astracore-embed-v1.0
+          --data datasets/astracore-embed-v1.0.jsonl
           --validation-ratio 0.2
           --seed 42
-          | tee artifacts/astracore-embed-v0.1/evaluation.json
-      - name: Verify checkpoint completeness
+          | tee artifacts/astracore-embed-v1.0/evaluation.json
+      - name: Verify checkpoint completeness and benchmark size
         run: |
-          test -s artifacts/astracore-embed-v0.1/model.pt
-          test -s artifacts/astracore-embed-v0.1/config.json
-          test -s artifacts/astracore-embed-v0.1/tokenizer.json
-          test -s artifacts/astracore-embed-v0.1/training_state.json
-          test -s artifacts/astracore-embed-v0.1/dataset_manifest.json
+          test -s artifacts/astracore-embed-v1.0/model.pt
+          test -s artifacts/astracore-embed-v1.0/config.json
+          test -s artifacts/astracore-embed-v1.0/tokenizer.json
+          test -s artifacts/astracore-embed-v1.0/training_state.json
+          test -s artifacts/astracore-embed-v1.0/dataset_manifest.json
           python - <<'PY'
           import json
           from pathlib import Path
-          root = Path('artifacts/astracore-embed-v0.1')
+          root = Path('artifacts/astracore-embed-v1.0')
           state = json.loads((root / 'training_state.json').read_text())
           evaluation = json.loads((root / 'evaluation.json').read_text())
           assert state.get('status') == 'trained', state
-          assert evaluation.get('pairs', 0) >= 1, evaluation
+          assert state.get('seed') == 42, state
+          assert state.get('best_val_loss') is not None, state
+          assert evaluation.get('pairs', 0) >= 100, evaluation
           assert evaluation.get('embedding_dim') == 384, evaluation
-          print('AstraCoreEmbed checkpoint gate: PASS')
+          for key in ('recall_at_1','recall_at_5','recall_at_10','mrr','mean_positive_cosine','top1_accuracy'):
+              assert evaluation.get(key) is not None, evaluation
+          print('AstraCoreEmbed v1.0 evidence gate: PASS')
           print(json.dumps(evaluation, indent=2))
           PY
       - name: Upload trained checkpoint artifact
         uses: actions/upload-artifact@v4
         with:
-          name: astracore-embed-v0.1-checkpoint
-          path: artifacts/astracore-embed-v0.1/
+          name: astracore-embed-v1.0-checkpoint
+          path: artifacts/astracore-embed-v1.0/
           if-no-files-found: error
           retention-days: 30
