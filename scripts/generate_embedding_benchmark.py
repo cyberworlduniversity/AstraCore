@@ -27,11 +27,10 @@ def main():
         right = positive_rows[(index + 1) % len(positive_rows)]
         negative_concept = concepts[(concepts.index(concept) + 1 + (index % (len(concepts) - 1))) % len(concepts)]
         negative = groups[negative_concept][index % len(groups[negative_concept])]
-        rows.append({'id': f'embed-{index:04d}', 'text_a': left, 'text_b': right, 'hard_negative': negative})
+        rows.append({'id': f'embed-{index:04d}', 'left': left, 'right': right, 'hard_negative': negative})
     rng.shuffle(rows)
     Path(args.output).write_text(''.join(json.dumps(row, ensure_ascii=False) + '\n' for row in rows), encoding='utf-8')
     print(json.dumps({'pairs': len(rows), 'concepts': len(concepts), 'seed': args.seed, 'output': args.output}, indent=2))
 
 
-if __name__ == '__main__':
-    main()
+if __name__ == '__main__': main()
