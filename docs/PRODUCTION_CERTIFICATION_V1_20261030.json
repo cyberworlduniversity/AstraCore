@@ -1,0 +1,33 @@
+{
+  "generated_at": "2026-10-30T15:00:00Z",
+  "project": "AstraCore",
+  "head": "d6953e340890061db1155397a7ca3aa50f9fdbfc",
+  "release_status": "PRODUCTION BLOCKED",
+  "gates": {
+    "LM": {"status":"BLOCKED","evidence":"v1.0 dataset: 1236 records; train 1008, validation 108, test 120. Last measured validation loss 10.0984 / perplexity 24304.37; test loss 10.1959 / perplexity 26792.99. No production promotion."},
+    "EMBEDDING": {"status":"PASS","evidence":"600-pair benchmark with hard negatives; held-out evaluation 120 pairs; Recall@1 0.8833, Recall@5 1.0, Recall@10 1.0, MRR 0.9417, top-1 0.8833, mean positive cosine 0.9063; 384 dimensions; checkpoint SHA-256 81a002c3706c63226515442e3c58af57febd0bd3c3e765230c616a8bffa0b45b; 3,516,544 parameters."},
+    "RAG": {"status":"BLOCKED","evidence":"Hybrid search function hardened with owner filtering and full outer keyword/semantic merge, but a complete authenticated live end-to-end RAG evidence run is not available in this execution."},
+    "MEMORY": {"status":"BLOCKED","evidence":"Architecture and authenticated routes exist, but mandatory two-user remember/retrieve/forget isolation execution evidence is not available."},
+    "TOOLS": {"status":"BLOCKED","evidence":"Tool registry and high-risk confirmation policy exist, but several tools remain explicitly not_implemented and therefore cannot be promoted."},
+    "MULTIMODAL": {"status":"BLOCKED","evidence":"Extractor supports declared document families, but full real-file matrix execution evidence for PDF/DOCX/PPTX/XLSX/PNG/JPG is not available."},
+    "WEB": {"status":"BLOCKED","evidence":"Web research capability is structurally present but live search/fetch/citation and web prompt-injection execution evidence is not available."},
+    "CODING": {"status":"BLOCKED","evidence":"Coding intelligence modules are present, but sandboxed execution and patch correctness evidence is not complete."},
+    "AGENTS": {"status":"BLOCKED","evidence":"Agent/orchestrator modules are present, but bounded-loop/failure-recovery execution evidence is not complete."},
+    "SAFETY": {"status":"BLOCKED","evidence":"Safety hierarchy, secret redaction and high-risk confirmation exist; complete adversarial suite evidence is not available."},
+    "EVALUATION": {"status":"BLOCKED","evidence":"Embedding evaluation is real; full LM/RAG/memory/tool/coding/system safety evaluation matrix is not fully executed."},
+    "API": {"status":"BLOCKED","evidence":"Existing authenticated API tests previously passed, but full v1 endpoint matrix including rate-limit, malformed, oversized and authorization cases was not re-executed after the latest security commits."},
+    "DATABASE": {"status":"PASS","evidence":"Supabase project ACTIVE_HEALTHY; migrations applied through 20261030145641; FK/duplicate-index fixes applied; RLS policies optimized; hybrid knowledge search hardened."},
+    "AUTH": {"status":"BLOCKED","evidence":"Supabase-backed session authentication exists with HttpOnly/Secure production cookies and admin email authorization; leaked-password protection remains disabled and requires external Auth configuration."},
+    "OBSERVABILITY": {"status":"BLOCKED","evidence":"Request/log infrastructure exists, but complete production metric and redaction verification was not re-executed."},
+    "RELIABILITY": {"status":"BLOCKED","evidence":"Health/readiness and failure-handling structures exist, but restart/dependency/database/model/tool failure matrix was not fully executed."},
+    "UI": {"status":"BLOCKED","evidence":"Existing UI preserved; no fresh complete mobile/desktop console/E2E evidence was produced in this execution."},
+    "SECURITY": {"status":"BLOCKED","evidence":"Security hardening performed: RLS optimization, hybrid RAG owner isolation, HSTS/CSP/security headers. Remaining external leaked-password protection and incomplete adversarial execution prevent PASS."},
+    "DEPLOYMENT": {"status":"BLOCKED","evidence":"Latest verified READY deployment is commit 06e4926...; deployment of current head d6953e3... returned Vercel 402 api-deployments-free-per-day with retryAfter 86400 seconds."},
+    "ROLLBACK": {"status":"BLOCKED","evidence":"Vercel identifies prior production deployments as rollback candidates, but rollback of the current release was not executed and verified."}
+  },
+  "supabase": {"project_ref":"pmqdghauotnxxrupglvz","region":"eu-west-1","status":"ACTIVE_HEALTHY","rls_policy_count":50},
+  "embedding_artifact": {"artifact_id":12985269578,"artifact_sha256":"0c42bee85eb5eae8ef3f29f3240b9ca0c2e088a8dc2ddd17aa8b55818154e2c4"},
+  "dataset": {"id":"astracore-lm-v1.0","version":"1.0.0","records":1236,"train":1008,"validation":108,"test":120,"license":"CC0-1.0","sha256":"8172fbbf83c808c3d0861cc1226b6cde00536c504f5d8f51c523b232ed84fe65"},
+  "external_blockers":["Vercel deployment quota: api-deployments-free-per-day; retryAfter 86400 seconds at certification time.","Supabase leaked-password protection requires external Auth configuration unavailable through the connected database tool."],
+  "policy":"No certification threshold was changed and no capability was promoted solely from source-code presence. BLOCKED means required runtime evidence or an external release prerequisite is missing."
+}
