@@ -26,47 +26,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: STEP5D run start and clean workspace
         run: |
           set -euo pipefail
           rm -rf datasets/astracore-lm-v0.2 artifacts/astracore-lm-v0.2 artifacts/step5d step5d-evidence step5d-evidence.tar.gz step5d-evidence.sha256
           python - <<'PY'
           import json, os, platform, sys, time
-          m={
-            'workflow':'AstraCoreLM Step 5 Retraining',
-            'run_id':os.environ.get('GITHUB_RUN_ID','NOT_AVAILABLE_IN_RUNNER'),
-            'workflow_run':os.environ.get('GITHUB_SERVER_URL','')+'/'+os.environ.get('GITHUB_REPOSITORY','')+'/actions/runs/'+os.environ.get('GITHUB_RUN_ID',''),
-            'commit_sha':os.environ.get('GITHUB_SHA','NOT_AVAILABLE_IN_RUNNER'),
-            'branch':os.environ.get('GITHUB_REF_NAME','NOT_AVAILABLE_IN_RUNNER'),
-            'timestamp':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),
-            'python_version':sys.version.split()[0],
-            'pytorch_version':'NOT_AVAILABLE_IN_RUNNER',
-            'runner':platform.platform(),
-            'working_directory':os.getcwd(),
-            'dataset_version':'0.2.0',
-            'architecture_version':'astracorelm-arch-v0.2',
-            'tokenizer_version':'astratokenizer-v0.1',
-            'seed':42,
-            'production_approved':False,
-            'production_gate':'CLOSED',
-            'status':'RUNNING'
-          }
-          json.dump(m,open('step5-run-manifest.json','w'),indent=2)
-          print('STEP5D_RUN_START')
-          print(json.dumps(m,indent=2))
+          m={'workflow':'AstraCoreLM Step 5 Retraining','run_id':os.environ.get('GITHUB_RUN_ID','NOT_AVAILABLE_IN_RUNNER'),'workflow_run':os.environ.get('GITHUB_SERVER_URL','')+'/'+os.environ.get('GITHUB_REPOSITORY','')+'/actions/runs/'+os.environ.get('GITHUB_RUN_ID',''),'commit_sha':os.environ.get('GITHUB_SHA','NOT_AVAILABLE_IN_RUNNER'),'branch':os.environ.get('GITHUB_REF_NAME','NOT_AVAILABLE_IN_RUNNER'),'timestamp':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'python_version':sys.version.split()[0],'pytorch_version':'NOT_AVAILABLE_IN_RUNNER','runner':platform.platform(),'working_directory':os.getcwd(),'dataset_version':'0.2.0','architecture_version':'astracorelm-arch-v0.2','tokenizer_version':'astratokenizer-v0.1','seed':42,'production_approved':False,'production_gate':'CLOSED','status':'RUNNING'}
+          json.dump(m,open('step5-run-manifest.json','w'),indent=2); print('STEP5D_RUN_START'); print(json.dumps(m,indent=2))
           PY
-
       - name: Install Python dependencies
         run: |
           set -euo pipefail
@@ -74,17 +50,13 @@ jobs:
           python -m pip install -r requirements.txt
           python - <<'PY'
           import json, pathlib, sys, torch
-          p=pathlib.Path('step5-run-manifest.json'); m=json.loads(p.read_text())
-          m['python_version']=sys.version.split()[0]; m['pytorch_version']=torch.__version__
-          p.write_text(json.dumps(m,indent=2)+'\n')
+          p=pathlib.Path('step5-run-manifest.json'); m=json.loads(p.read_text()); m['python_version']=sys.version.split()[0]; m['pytorch_version']=torch.__version__; p.write_text(json.dumps(m,indent=2)+'\n')
           PY
-
       - name: Baseline regression
         run: |
           set -euo pipefail
           npm test
           python -m pytest -q tests
-
       - name: STEP5D dataset
         run: |
           set -euo pipefail
@@ -93,18 +65,10 @@ jobs:
           python - <<'PY'
           import hashlib, json
           from pathlib import Path
-          root=Path('datasets/astracore-lm-v0.2'); records=root/'records.jsonl'; meta=json.loads((root/'metadata.json').read_text())
-          expected=(1648,1280,160,208)
-          actual=(meta['record_count'],meta['train_count'],meta['validation_count'],meta['test_count'])
-          assert meta['version']=='0.2.0' and actual==expected, (meta['version'],actual)
-          rows=[json.loads(x) for x in records.read_text().splitlines() if x.strip()]
-          ids={s:{x['document_id'] for x in rows if x['split']==s} for s in ('train','validation','test')}
-          assert not (ids['train']&ids['validation'] or ids['train']&ids['test'] or ids['validation']&ids['test'])
-          dataset_sha=hashlib.sha256(records.read_bytes()).hexdigest()
-          p=Path('step5-run-manifest.json'); m=json.loads(p.read_text()); m.update({'dataset_sha256':dataset_sha,'dataset_record_count':len(rows),'train_count':meta['train_count'],'validation_count':meta['validation_count'],'test_count':meta['test_count']}); p.write_text(json.dumps(m,indent=2)+'\n')
-          print('DATASET_SHA256='+dataset_sha); print(json.dumps(meta,indent=2)); print('STEP5D_DATASET_COMPLETE')
+          root=Path('datasets/astracore-lm-v0.2'); records=root/'records.jsonl'; meta=json.loads((root/'metadata.json').read_text()); expected=(1648,1280,160,208); actual=(meta['record_count'],meta['train_count'],meta['validation_count'],meta['test_count']); assert meta['version']=='0.2.0' and actual==expected, (meta['version'],actual)
+          rows=[json.loads(x) for x in records.read_text().splitlines() if x.strip()]; ids={s:{x['document_id'] for x in rows if x['split']==s} for s in ('train','validation','test')}; assert not (ids['train']&ids['validation'] or ids['train']&ids['test'] or ids['validation']&ids['test'])
+          dataset_sha=hashlib.sha256(records.read_bytes()).hexdigest(); p=Path('step5-run-manifest.json'); m=json.loads(p.read_text()); m.update({'dataset_sha256':dataset_sha,'dataset_record_count':len(rows),'train_count':meta['train_count'],'validation_count':meta['validation_count'],'test_count':meta['test_count']}); p.write_text(json.dumps(m,indent=2)+'\n'); print('DATASET_SHA256='+dataset_sha); print(json.dumps(meta,indent=2)); print('STEP5D_DATASET_COMPLETE')
           PY
-
       - name: STEP5D training
         run: |
           set -euo pipefail
@@ -113,20 +77,11 @@ jobs:
           python - <<'PY'
           import json, math
           from pathlib import Path
-          s=json.loads(Path('artifacts/astracore-lm-v0.2/training_state.json').read_text())
-          assert s['optimizer_steps'] > 0 and s['epochs_completed'] == 8
-          assert s['initial_parameter_sha256'] != s['trained_parameter_sha256']
-          assert s['weights_changed'] is True
+          s=json.loads(Path('artifacts/astracore-lm-v0.2/training_state.json').read_text()); assert s['optimizer_steps']>0 and s['epochs_completed']==8; assert s['initial_parameter_sha256']!=s['trained_parameter_sha256']; assert s['weights_changed'] is True
           for row in s['history']:
-              for key in ('train_loss','validation_loss','validation_ppl'):
-                  assert key in row and math.isfinite(float(row[key])), (row.get('epoch'),key,row.get(key))
-          print('OPTIMIZER_STEPS='+str(s['optimizer_steps']))
-          print('INITIAL_PARAMETER_SHA256='+s['initial_parameter_sha256'])
-          print('TRAINED_PARAMETER_SHA256='+s['trained_parameter_sha256'])
-          print('WEIGHTS_CHANGED=true')
-          print('STEP5D_TRAINING_COMPLETE')
+              for key in ('train_loss','validation_loss','validation_ppl'): assert key in row and math.isfinite(float(row[key])), (row.get('epoch'),key,row.get(key))
+          print('OPTIMIZER_STEPS='+str(s['optimizer_steps'])); print('INITIAL_PARAMETER_SHA256='+s['initial_parameter_sha256']); print('TRAINED_PARAMETER_SHA256='+s['trained_parameter_sha256']); print('WEIGHTS_CHANGED=true'); print('STEP5D_TRAINING_COMPLETE')
           PY
-
       - name: STEP5D checkpoint integrity
         run: |
           set -euo pipefail
@@ -135,13 +90,9 @@ jobs:
           python - <<'PY'
           import json, hashlib
           from pathlib import Path
-          root=Path('artifacts/astracore-lm-v0.2'); ck=root/'checkpoint.pt'; s=json.loads((root/'training_state.json').read_text())
-          actual=hashlib.sha256(ck.read_bytes()).hexdigest()
-          assert actual==s['checkpoint_sha256']
-          assert ck.stat().st_size > 0
+          root=Path('artifacts/astracore-lm-v0.2'); ck=root/'checkpoint.pt'; s=json.loads((root/'training_state.json').read_text()); actual=hashlib.sha256(ck.read_bytes()).hexdigest(); assert actual==s['checkpoint_sha256']; assert ck.stat().st_size>0
           p=Path('step5-run-manifest.json'); m=json.loads(p.read_text()); m.update({'checkpoint_path':str(ck),'checkpoint_sha256':actual,'checkpoint_size_bytes':ck.stat().st_size,'initial_parameter_sha256':s['initial_parameter_sha256'],'trained_parameter_sha256':s['trained_parameter_sha256'],'weights_changed':s['weights_changed'],'optimizer_steps':s['optimizer_steps'],'epochs_completed':s['epochs_completed'],'best_epoch':s['best_epoch'],'validation_loss':s['best_validation_loss'],'validation_ppl':s['best_validation_ppl']}); p.write_text(json.dumps(m,indent=2)+'\n')
           PY
-
       - name: STEP5D fresh-process reload
         run: |
           set -euo pipefail
@@ -151,21 +102,14 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
-          r=json.loads(Path('artifacts/astracore-lm-v0.2/runtime_verification.json').read_text())
-          assert r['reload_pass'] is True
-          assert r['architecture_version']=='astracorelm-arch-v0.2'
-          assert r['tokenizer_version']=='astratokenizer-v0.1'
-          assert r['over_limit_behavior']=='REJECTED'
-          print('STEP5D_RELOAD_COMPLETE')
+          r=json.loads(Path('artifacts/astracore-lm-v0.2/runtime_verification.json').read_text()); assert r['reload_pass'] is True; assert r['architecture_version']=='astracorelm-arch-v0.2'; assert r['tokenizer_version']=='astratokenizer-v0.1'; assert r['over_limit_behavior']=='REJECTED'; print('STEP5D_RELOAD_COMPLETE')
           PY
-
       - name: STEP5D independent evaluation
         run: |
           set -euo pipefail
           echo STEP5D_EVALUATION_START
           python scripts/evaluate_lm_v02.py --dataset datasets/astracore-lm-v0.2 --checkpoint artifacts/astracore-lm-v0.2
           echo STEP5D_EVALUATION_COMPLETE
-
       - name: STEP5D behavioral evaluation evidence
         run: |
           set -euo pipefail
@@ -174,14 +118,8 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
-          r=json.loads(Path('artifacts/astracore-lm-v0.2/behavioral_evaluation.json').read_text())
-          assert r['production_approved'] is False
-          required=('instruction_following','structured_output','context_grounding','unknown_information','basic_reasoning','language_handling','longer_context')
-          assert all(k in r['behavioral_summary'] for k in required)
-          print(json.dumps(r['behavioral_summary'],indent=2))
-          print('STEP5D_BEHAVIORAL_COMPLETE')
+          r=json.loads(Path('artifacts/astracore-lm-v0.2/behavioral_evaluation.json').read_text()); assert r['production_approved'] is False; required=('instruction_following','structured_output','context_grounding','unknown_information','basic_reasoning','language_handling','longer_context'); assert all(k in r['behavioral_summary'] for k in required); print(json.dumps(r['behavioral_summary'],indent=2)); print('STEP5D_BEHAVIORAL_COMPLETE')
           PY
-
       - name: Generate Step 5 reports
         run: |
           set -euo pipefail
@@ -189,12 +127,9 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
-          s=json.loads(Path('artifacts/astracore-lm-v0.2/training_state.json').read_text())
-          e=json.loads(Path('artifacts/astracore-lm-v0.2/behavioral_evaluation.json').read_text())
-          assert s['production_approved'] is False and e['production_approved'] is False
+          s=json.loads(Path('artifacts/astracore-lm-v0.2/training_state.json').read_text()); e=json.loads(Path('artifacts/astracore-lm-v0.2/behavioral_evaluation.json').read_text()); assert s['production_approved'] is False and e['production_approved'] is False
           p=Path('step5-run-manifest.json'); m=json.loads(p.read_text()); m.update({'test_loss':e['test_loss'],'test_ppl':e['test_perplexity'],'production_approved':False}); p.write_text(json.dumps(m,indent=2)+'\n')
           PY
-
       - name: STEP5D artifact and evidence packaging
         if: always()
         env:
@@ -203,46 +138,36 @@ jobs:
           set -euo pipefail
           echo STEP5D_ARTIFACT_START
           mkdir -p step5d-evidence
-          cp step5-run-manifest.json step5d-evidence/step5-run-manifest.json 2>/dev/null || true
-          for f in docs/astracorelm-step5-diagnosis.json docs/astracorelm-step5-diagnosis.md docs/astracorelm-step5-training-report.json docs/astracorelm-step5-comparison.json docs/astracorelm-step5-comparison.md; do
-            if [ -f "$f" ]; then cp "$f" step5d-evidence/; fi
-          done
+          if [ -f step5-run-manifest.json ]; then cp step5-run-manifest.json step5d-evidence/step5-run-manifest.json; else printf '%s\n' '{"status":"FAILED","run_id":"NOT_VERIFIED","production_approved":false,"production_gate":"CLOSED"}' > step5d-evidence/step5-run-manifest.json; fi
+          for f in docs/astracorelm-step5-diagnosis.json docs/astracorelm-step5-diagnosis.md docs/astracorelm-step5-training-report.json docs/astracorelm-step5-comparison.json docs/astracorelm-step5-comparison.md; do if [ -f "$f" ]; then cp "$f" step5d-evidence/; fi; done
           if [ -d datasets/astracore-lm-v0.2 ]; then cp -r datasets/astracore-lm-v0.2 step5d-evidence/; fi
           if [ -d artifacts/astracore-lm-v0.2 ]; then cp -r artifacts/astracore-lm-v0.2 step5d-evidence/; fi
           python - <<'PY'
-          import hashlib, json
+          import hashlib
           from pathlib import Path
           root=Path('step5d-evidence'); files=sorted(p for p in root.rglob('*') if p.is_file() and p.name!='checksums.sha256')
           with (root/'checksums.sha256').open('w') as out:
               for p in files: out.write(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+str(p.relative_to(root))+'\n')
           PY
           tar -czf step5d-evidence.tar.gz step5d-evidence
-          ARTIFACT_SHA=$(sha256sum step5d-evidence.tar.gz | awk '{print $1}')
-          ARTIFACT_SIZE=$(stat -c%s step5d-evidence.tar.gz)
-          printf '%s  %s\n' "$ARTIFACT_SHA" step5d-evidence.tar.gz | tee step5d-evidence.sha256
+          ARTIFACT_SHA=$(sha256sum step5d-evidence.tar.gz | awk '{print $1}'); ARTIFACT_SIZE=$(stat -c%s step5d-evidence.tar.gz); printf '%s  %s\n' "$ARTIFACT_SHA" step5d-evidence.tar.gz | tee step5d-evidence.sha256
           python - <<PY
           import json
           from pathlib import Path
-          p=Path('step5-run-manifest.json'); m=json.loads(p.read_text()); m.update({'artifact_sha256':'$ARTIFACT_SHA','artifact_size_bytes':int('$ARTIFACT_SIZE'),'final_status':'SUCCESS' if '$JOB_STATUS'=='success' else 'FAILED','status':'SUCCESS' if '$JOB_STATUS'=='success' else 'FAILED'}); p.write_text(json.dumps(m,indent=2)+'\n')
-          Path('step5d-evidence/step5-run-manifest.final.json').write_text(p.read_text())
+          p=Path('step5-run-manifest.json'); m=json.loads(p.read_text()); m.update({'artifact_sha256':'$ARTIFACT_SHA','artifact_size_bytes':int('$ARTIFACT_SIZE'),'final_status':'SUCCESS' if '$JOB_STATUS'=='success' else 'FAILED','status':'SUCCESS' if '$JOB_STATUS'=='success' else 'FAILED'}); p.write_text(json.dumps(m,indent=2)+'\n'); Path('step5d-evidence/step5-run-manifest.final.json').write_text(p.read_text())
           PY
           echo STEP5D_ARTIFACT_COMPLETE
-
       - name: STEP5D final marker
         if: always()
-        env:
-          JOB_STATUS: ${{ job.status }}
         run: |
           set -euo pipefail
           python - <<'PY'
           import json
           from pathlib import Path
           p=Path('step5-run-manifest.json')
-          if p.exists():
-              m=json.loads(p.read_text()); m['production_approved']=False; m['production_gate']='CLOSED'; p.write_text(json.dumps(m,indent=2)+'\n')
+          if p.exists(): m=json.loads(p.read_text()); m['production_approved']=False; m['production_gate']='CLOSED'; p.write_text(json.dumps(m,indent=2)+'\n')
           print('STEP5D_RUN_COMPLETE')
           PY
-
       - name: Upload single Step 5D evidence artifact
         if: always()
         uses: actions/upload-artifact@v4
