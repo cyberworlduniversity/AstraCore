@@ -1,0 +1,64 @@
+{"left":"What is phishing?","right":"Phishing is a social engineering attack that tricks people into revealing sensitive information."}
+{"left":"How can I identify a phishing email?","right":"Check the sender, links, urgency, spelling, unexpected attachments, and requests for credentials or money."}
+{"left":"What is multi-factor authentication?","right":"Multi-factor authentication requires more than one type of verification to access an account."}
+{"left":"Why should passwords be unique?","right":"Unique passwords prevent one stolen password from being reused to compromise other accounts."}
+{"left":"What is a password manager?","right":"A password manager securely stores and generates strong passwords for different accounts."}
+{"left":"What is malware?","right":"Malware is software designed to damage systems, steal information, or perform unauthorized actions."}
+{"left":"What is ransomware?","right":"Ransomware is malware that encrypts or blocks access to data and demands payment."}
+{"left":"How does antivirus software help?","right":"Antivirus software detects, blocks, or removes known and suspicious malicious programs."}
+{"left":"What is a firewall?","right":"A firewall controls network traffic according to security rules."}
+{"left":"What is network segmentation?","right":"Network segmentation separates systems into security zones to limit unauthorized movement."}
+{"left":"What is the principle of least privilege?","right":"Least privilege gives users and processes only the permissions required for their tasks."}
+{"left":"What is SQL injection?","right":"SQL injection occurs when untrusted input changes the meaning of a database query."}
+{"left":"How can SQL injection be prevented?","right":"Parameterized queries and proper input handling are primary defenses against SQL injection."}
+{"left":"What is cross-site scripting?","right":"Cross-site scripting is a web vulnerability where attacker-controlled script executes in another user's browser."}
+{"left":"How can XSS be reduced?","right":"Output encoding, safe templating, input validation, and an appropriate content security policy reduce XSS risk."}
+{"left":"What is cross-site request forgery?","right":"CSRF tricks an authenticated browser into sending an unwanted request to a trusted site."}
+{"left":"What is encryption?","right":"Encryption transforms readable data into ciphertext so unauthorized parties cannot easily read it."}
+{"left":"What is hashing?","right":"Hashing converts data into a fixed-length digest and is designed to be one-way."}
+{"left":"What is HTTPS?","right":"HTTPS uses TLS to protect HTTP traffic between a client and a server."}
+{"left":"What is TLS?","right":"TLS provides encrypted communication and helps authenticate network endpoints."}
+{"left":"What is a security patch?","right":"A security patch fixes a known vulnerability or weakness in software."}
+{"left":"Why are software updates important for security?","right":"Updates can remove vulnerabilities that attackers could otherwise exploit."}
+{"left":"What is vulnerability scanning?","right":"Vulnerability scanning automatically checks systems for known security weaknesses."}
+{"left":"What is penetration testing?","right":"Penetration testing is an authorized security assessment that attempts to find and demonstrate exploitable weaknesses."}
+{"left":"What is threat modeling?","right":"Threat modeling identifies assets, attackers, attack paths, and mitigations before or during system design."}
+{"left":"What is incident response?","right":"Incident response is the organized process of detecting, containing, investigating, and recovering from security incidents."}
+{"left":"What is a security log?","right":"A security log records events that can help detect attacks, investigate incidents, and audit activity."}
+{"left":"What is a SIEM?","right":"A SIEM collects and analyzes security events from multiple systems to support detection and investigation."}
+{"left":"What is a zero-day vulnerability?","right":"A zero-day vulnerability is a previously unknown or unpatched weakness that may be exploited before a fix is available."}
+{"left":"What is secure coding?","right":"Secure coding applies defensive programming practices to reduce vulnerabilities in software."}
+{"left":"What is input validation?","right":"Input validation checks that incoming data matches expected type, format, range, and constraints."}
+{"left":"Why should secrets not be stored in source code?","right":"Secrets in source code can be exposed through repositories, logs, builds, or leaked copies."}
+{"left":"What is API authentication?","right":"API authentication verifies the identity or credentials of a client before allowing protected operations."}
+{"left":"What is authorization?","right":"Authorization determines which actions or resources an authenticated identity is allowed to access."}
+{"left":"What is rate limiting?","right":"Rate limiting restricts how frequently a client can perform an operation to reduce abuse and overload."}
+{"left":"What is a security audit?","right":"A security audit systematically reviews controls, configurations, evidence, and processes against defined requirements."}
+{"left":"What is data minimization?","right":"Data minimization means collecting and retaining only the information needed for a legitimate purpose."}
+{"left":"What is a backup?","right":"A backup is a separate copy of data that can be used for recovery after loss or corruption."}
+{"left":"Why should backups be tested?","right":"Backup testing verifies that stored copies can actually be restored when needed."}
+{"left":"What is a supply-chain attack?","right":"A supply-chain attack compromises a trusted dependency, vendor, or build process to reach downstream users."}
+{"left":"What is dependency pinning?","right":"Dependency pinning fixes software dependencies to known versions so unexpected changes do not enter a build."}
+{"left":"What is container isolation?","right":"Container isolation limits processes and resources within a container boundary, although it is not a complete security boundary by itself."}
+{"left":"What is a sandbox?","right":"A sandbox runs code in a restricted environment with limited access to sensitive resources."}
+{"left":"What is prompt injection?","right":"Prompt injection is an attempt to manipulate an AI system through crafted instructions in user or retrieved content."}
+{"left":"How should retrieved documents be treated by an AI system?","right":"Retrieved documents should be treated as untrusted data and must not override higher-priority instructions."}
+{"left":"What is retrieval-augmented generation?","right":"RAG retrieves relevant external knowledge and supplies it to a language model as context for an answer."}
+{"left":"What is hybrid search?","right":"Hybrid search combines keyword matching with vector or semantic similarity to improve retrieval."}
+{"left":"Why use embeddings for search?","right":"Embeddings represent text as vectors so semantically related content can be compared by similarity."}
+{"left":"What is cosine similarity?","right":"Cosine similarity measures the angle-based similarity between two vectors."}
+{"left":"What is model evaluation?","right":"Model evaluation measures quality on held-out data using defined metrics and acceptance criteria."}
+{"left":"Why keep training and validation data separate?","right":"Separating training and validation data helps estimate how well a model generalizes to unseen examples."}
+{"left":"What is overfitting?","right":"Overfitting occurs when a model learns training examples too closely and performs poorly on unseen data."}
+{"left":"What is a model checkpoint?","right":"A model checkpoint is a saved state containing learned parameters and related configuration needed to resume or reproduce inference."}
+{"left":"What does reproducible training mean?","right":"Reproducible training records data, configuration, random seeds, code version, and outputs so a run can be repeated."}
+{"left":"What is model provenance?","right":"Model provenance records where training data, code, configuration, and model artifacts came from."}
+{"left":"Why verify dataset licensing before training?","right":"Dataset licensing determines whether the data can legally be used, modified, and redistributed for the intended purpose."}
+{"left":"What is a training corpus?","right":"A training corpus is a collection of text or other examples used to teach a model."}
+{"left":"What is contrastive learning?","right":"Contrastive learning trains representations by bringing related examples closer and separating unrelated examples."}
+{"left":"What is semantic retrieval evaluation?","right":"Semantic retrieval evaluation measures whether relevant items are ranked highly for queries with known positive matches."}
+{"left":"What is top-1 retrieval accuracy?","right":"Top-1 retrieval accuracy is the fraction of queries whose correct positive item is ranked first."}
+{"left":"What is a vector database?","right":"A vector database stores and searches vector representations efficiently for similarity retrieval."}
+{"left":"Why use an HNSW index for vectors?","right":"HNSW provides approximate nearest-neighbor search that can make vector similarity queries fast at scale."}
+{"left":"What is user-level data isolation?","right":"User-level data isolation ensures one user's private records cannot be accessed by another user."}
+{"left":"Why use row-level security?","right":"Row-level security lets the database enforce which rows each authenticated user may access."}
