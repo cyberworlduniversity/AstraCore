@@ -8,12 +8,15 @@ import {
   safetyBoundary,
   selectMemories,
 } from './production-pipeline.js';
+import { buildRagContext } from './steps18-20-runtime.js';
 
 export class AstraCoreOrchestrator {
-  constructor({ modelProvider, knowledgeRouter, memoryLoader = null }) {
+  constructor({ modelProvider, knowledgeRouter, memoryLoader = null, toolRegistry = null, toolExecutors = {} }) {
     this.modelProvider = modelProvider;
     this.knowledgeRouter = knowledgeRouter;
     this.memoryLoader = memoryLoader;
+    this.toolRegistry = toolRegistry;
+    this.toolExecutors = toolExecutors;
   }
 
   async prepare(query, options = {}) {
@@ -30,7 +33,11 @@ export class AstraCoreOrchestrator {
       const memories = await this.memoryLoader(query, { limit: options.limit || 8 });
       context.memories = selectMemories(memories, options.limit || 8);
       context.tools_used.push('memory');
-    } else if (plan.intent === 'web_search') {
+    }
+
+    if (this.toolRegistry && plan.steps?.length) context.tool_plan = plan.steps;
+
+    if (plan.intent === 'web_search') {
       context.tools_used.push('web_search');
       context.warnings.push('WebSearchTool is NOT IMPLEMENTED in this release.');
     } else if (plan.intent === 'calculator') {
@@ -43,13 +50,17 @@ export class AstraCoreOrchestrator {
       context.tools_used.push('database_query');
       context.warnings.push('Structured data analysis tool is NOT IMPLEMENTED in this release.');
     }
+
+    context.rag = buildRagContext({ query, knowledge: context.knowledge, memories: context.memories, extra: context.warnings.join('\n') });
+    context.knowledge = context.rag.knowledge;
+    context.memories = context.rag.memories;
     return context;
   }
 
   buildPrompt(query, context) {
     return [
       safetyBoundary(),
-      buildBoundedContext({ query, knowledge: context.knowledge, memories: context.memories, extra: context.warnings.join('\n') }),
+      context.rag?.context || buildBoundedContext({ query, knowledge: context.knowledge, memories: context.memories, extra: context.warnings.join('\n') }),
       'Answer honestly. If evidence is insufficient, state that it could not be verified.',
     ].join('\n\n');
   }
