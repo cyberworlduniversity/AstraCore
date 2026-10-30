@@ -1,0 +1,96 @@
+name: AstraCoreLM Step 5 Retraining
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'model/config_v02.py'
+      - 'model/model_v02.py'
+      - 'scripts/prepare_lm_dataset_v02.py'
+      - 'scripts/train_lm_v02.py'
+      - 'scripts/evaluate_lm_v02.py'
+      - 'scripts/write_step5_reports.py'
+      - 'tests/astracorelm_step5_test.py'
+      - '.github/workflows/astracore-lm-step5.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  step5:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Baseline regression
+        run: |
+          npm test
+          python -m pytest -q tests
+      - name: Prepare v0.2 dataset
+        run: python scripts/prepare_lm_dataset_v02.py --output datasets/astracore-lm-v0.2 --seed 42
+      - name: Validate split and dataset integrity
+        run: |
+          python - <<'PY'
+          import json, hashlib
+          from pathlib import Path
+          root=Path('datasets/astracore-lm-v0.2')
+          m=json.loads((root/'metadata.json').read_text())
+          assert (m['train_count'],m['validation_count'],m['test_count'])==(1280,160,208),m
+          rows=[json.loads(x) for x in (root/'records.jsonl').read_text().splitlines() if x.strip()]
+          docs={s:{r['document_id'] for r in rows if r['split']==s} for s in ('train','validation','test')}
+          assert not (docs['train']&docs['validation'] or docs['train']&docs['test'] or docs['validation']&docs['test'])
+          assert len({r['id'] for r in rows})==len(rows)
+          assert len({r['content_sha256'] for r in rows})==len(rows)
+          assert all(r['license']=='CC0-1.0' for r in rows)
+          print(json.dumps(m,indent=2))
+          PY
+      - name: Train candidate
+        run: >-
+          python scripts/train_lm_v02.py
+          --dataset datasets/astracore-lm-v0.2
+          --output artifacts/astracore-lm-v0.2
+          --context-length 128
+          --embedding-dimension 256
+          --layers 4
+          --heads 8
+          --ffn 1024
+          --epochs 8
+          --batch-size 16
+          --lr 3e-4
+          --weight-decay 0.01
+          --seed 42
+      - name: Independent reload evaluation and behavior
+        run: python scripts/evaluate_lm_v02.py --dataset datasets/astracore-lm-v0.2 --checkpoint artifacts/astracore-lm-v0.2
+      - name: Generate Step 5 reports
+        run: python scripts/write_step5_reports.py
+      - name: Assert production gate remains closed
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          s=json.loads(Path('artifacts/astracore-lm-v0.2/training_state.json').read_text())
+          assert s['production_approved'] is False
+          r=json.loads(Path('artifacts/astracore-lm-v0.2/behavioral_evaluation.json').read_text())
+          assert r['production_approved'] is False
+          print('PRODUCTION_GATE_CLOSED')
+          PY
+      - name: Upload Step 5 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: astracore-lm-v0.2-step5
+          path: |
+            artifacts/astracore-lm-v0.2/
+            datasets/astracore-lm-v0.2/metadata.json
+            datasets/astracore-lm-v0.2/records.jsonl
+          if-no-files-found: error
+          retention-days: 90
+      - name: Commit evidence reports
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/astracorelm-step5-diagnosis.json docs/astracorelm-step5-diagnosis.md docs/astracorelm-step5-experiments.json docs/astracorelm-step5-training-report.json docs/astracorelm-step5-comparison.json docs/astracorelm-step5-comparison.md
+          git diff --cached --quiet || git commit -m 'docs: record AstraCoreLM Step 5 experimental evidence'
+          git push
