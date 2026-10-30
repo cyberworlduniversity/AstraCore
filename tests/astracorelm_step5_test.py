@@ -1,3 +1,4 @@
+import pytest
 import torch
 from model.config_v02 import ModelConfigV02
 from model.model_v02 import AstraCoreLMV02
@@ -10,7 +11,7 @@ def test_bos_eos_contract_and_context_boundaries():
     ids=torch.tensor([tok.encode('hello')],dtype=torch.long)
     assert ids.shape[1] <= 8
     model(ids)
-    with torch.raises(ValueError):
+    with pytest.raises(ValueError, match='CONTEXT_LENGTH_EXCEEDED'):
         model(torch.zeros((1,9),dtype=torch.long))
 
 def test_loss_shift_is_next_token_and_padding_is_ignored():
@@ -50,8 +51,5 @@ def test_generation_rejects_context_overflow():
     cfg=ModelConfigV02(vocab_size=tok.vocab_size,context_length=4,tokenizer_sha256='x')
     model=AstraCoreLMV02(cfg)
     ids=torch.tensor([[tok.bos_id,2,3,4,5]],dtype=torch.long)
-    try:
+    with pytest.raises(ValueError, match='CONTEXT_LENGTH_EXCEEDED'):
         model.generate_greedy(ids,tok.eos_id,1)
-        assert False, 'expected overflow rejection'
-    except ValueError as exc:
-        assert 'CONTEXT_LENGTH_EXCEEDED' in str(exc)
