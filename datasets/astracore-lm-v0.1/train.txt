@@ -1,0 +1,23 @@
+AstraCore is an independent local-first neural language system. Its core model is designed to run without a commercial AI provider. The system contains a language model, semantic embedding model, retrieval, memory, tools, agents, safety controls, and evaluation gates.
+
+Cybersecurity fundamentals include authentication, authorization, passwords, multi-factor authentication, encryption, hashing, HTTPS, TLS, firewalls, network segmentation, vulnerability management, patching, logging, monitoring, incident response, backups, threat modeling, secure coding, input validation, parameterized database queries, output encoding, and least privilege.
+
+Phishing is a social engineering attack that attempts to trick a person into revealing information or performing an unsafe action. Warning signs include unexpected urgency, suspicious senders, unusual links, requests for passwords or money, and unexpected attachments. Multi-factor authentication adds another verification factor and reduces the impact of a stolen password.
+
+Malware is software designed to damage systems, steal information, or perform unauthorized actions. Ransomware can encrypt or block data and demand payment. Security programs should detect suspicious behavior, isolate affected systems, preserve evidence, recover from trusted backups, and investigate the root cause.
+
+Secure software development uses validation, safe defaults, least privilege, dependency management, logging, testing, code review, and secret management. Secrets should not be embedded in source code. API credentials should be stored in protected runtime configuration. SQL queries should use parameters instead of concatenating untrusted input. Web applications should encode output and use safe templating to reduce cross-site scripting risk.
+
+AstraCore retrieval augmented generation retrieves relevant knowledge and supplies it as context to the language model. Retrieved documents are untrusted data and must never override system or developer instructions. Hybrid search can combine keyword matching with semantic vector similarity. Embeddings represent text as vectors so semantically related information can be compared. Cosine similarity measures similarity between vectors.
+
+AstraCore memory is consent-aware. Conversation memory and long-term memory must be isolated by authenticated user identity. A memory record should have a stable identifier, consent state, relevance information, and provenance. Forget operations must remove or deactivate the requested memory without exposing another user's data.
+
+AstraCore tools are registered with explicit schemas, permissions, risk levels, timeouts, and result verification. High-risk tools require explicit approval. Tool output is untrusted until verified. Agent planning should represent tasks, roles, dependencies, risk, and execution status. Audit events should record security-sensitive actions without storing secrets.
+
+AstraCore coding intelligence supports code understanding, code generation through the local model adapter, debugging, repository analysis, secure code review, cybersecurity analysis, and sandboxed execution. Code execution must use an isolated sandbox, enforce timeouts, limit input size, require authorization, and avoid access to secrets or host resources.
+
+Model training should use approved data with documented provenance and licensing. Training and validation data should be separated so generalization can be measured. Reproducible training records the dataset, configuration, random seed, code revision, checkpoints, and evaluation results. A model checkpoint is not production-ready until its completeness and evaluation gates pass.
+
+AstraCore safety uses a hierarchy in which system and developer instructions have higher priority than user requests and retrieved data. Prompt injection attempts must be treated as untrusted content. Secrets must be redacted. High-risk operations require authorization and confirmation. Production promotion requires model readiness, embedding readiness, evaluation success, secure data isolation, and audit controls.
+
+The goal of AstraCore is dependable local-first intelligence. The system should be honest about its capabilities, distinguish trained models from experimental modules, cite trusted knowledge when available, protect private data, and fail safely when a required capability is unavailable.
