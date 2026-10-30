@@ -84,7 +84,7 @@ def main():
             vals = []
             for batch in batches(val_pairs):
                 left, lm = encode_batch(tokenizer, [p.left for p in batch], config.max_length)
-                right, rm = encode_batch(tokenizer, [p.left for p in batch], config.max_length)
+                right, rm = encode_batch(tokenizer, [p.right for p in batch], config.max_length)
                 vals.append(float(model.contrastive_loss(model(left, lm), model(right, rm))))
         val_loss = sum(vals) / max(1, len(vals)) if vals else train_loss
         print(json.dumps({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss}))
