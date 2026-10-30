@@ -18,9 +18,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
       - name: STEP5F preflight
@@ -28,14 +28,9 @@ jobs:
         run: |
           set -euo pipefail
           echo STEP5F_PREFLIGHT_START
-          echo "repository=${GITHUB_REPOSITORY}"
-          echo "branch=${GITHUB_REF_NAME}"
-          echo "commit_sha=${GITHUB_SHA}"
-          echo "python=$(python --version)"
-          echo "runner_os=${RUNNER_OS}"
-          echo "working_directory=${GITHUB_WORKSPACE}"
           test "${GITHUB_REPOSITORY}" = "cyberworlduniversity/AstraCore"
-          for f in model/config_v02.py model/model_v02.py scripts/prepare_lm_dataset_v02.py scripts/train_lm_v02.py scripts/evaluate_lm_v02.py tests/astracorelm_step5_test.py scripts/verify_step5d_runtime.py scripts/write_step5_reports.py requirements.txt .github/workflows/astracore-lm-step5.yml; do
+          test "${GITHUB_REF_NAME}" = "main"
+          for f in model/config_v02.py model/model_v02.py model/tokenizer.py scripts/prepare_lm_dataset_v02.py scripts/train_lm_v02.py scripts/evaluate_lm_v02.py tests/astracorelm_step5_test.py scripts/verify_step5d_runtime.py scripts/write_step5_reports.py requirements.txt .github/workflows/astracore-lm-step5.yml; do
             test -f "$f" || { echo "MISSING_REQUIRED_FILE=$f"; exit 1; }
           done
           grep -Eq '^  workflow_dispatch:' .github/workflows/astracore-lm-step5.yml
@@ -43,10 +38,13 @@ jobs:
           grep -q 'STEP5D_ARTIFACT_START' .github/workflows/astracore-lm-step5.yml
           grep -q '^torch>=2.2,<3$' requirements.txt
           grep -q '^numpy>=1.26,<3$' requirements.txt
+          grep -q '^pytest>=8,<9$' requirements.txt
+          python -m py_compile model/config_v02.py model/model_v02.py model/tokenizer.py scripts/prepare_lm_dataset_v02.py scripts/train_lm_v02.py scripts/evaluate_lm_v02.py
           echo "required_files=PASS"
-          echo "original_workflow_dispatch=PASS"
+          echo "workflow_dispatch=PASS"
           echo "step5d_instrumentation=PASS"
           echo "dependency_constraints=PASS"
+          echo "python_syntax=PASS"
           echo STEP5F_PREFLIGHT_COMPLETE
 
   train:
@@ -56,26 +54,29 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
-      - name: STEP5F run manifest
+      - name: Initialize evidence state
         run: |
           set -euo pipefail
           rm -rf datasets/astracore-lm-v0.2 artifacts/astracore-lm-v0.2 step5f-evidence step5f-evidence.tar.gz step5f-evidence.sha256
           python - <<'PY'
           import json, os, platform, sys, time
-          m={'workflow':'AstraCoreLM Step 5F Execution Recovery','source_workflow':'AstraCoreLM Step 5 Retraining','run_id':os.environ['GITHUB_RUN_ID'],'workflow_run':os.environ['GITHUB_SERVER_URL']+'/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/'+os.environ['GITHUB_RUN_ID'],'event':os.environ['GITHUB_EVENT_NAME'],'commit_sha':os.environ['GITHUB_SHA'],'branch':os.environ['GITHUB_REF_NAME'],'timestamp':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'python_version':sys.version.split()[0],'pytorch_version':'NOT_VERIFIED','numpy_version':'NOT_VERIFIED','runner':platform.platform(),'working_directory':os.getcwd(),'production_approved':False,'production_gate':'CLOSED','status':'RUNNING'}
-          assert m['event']=='workflow_dispatch'
-          json.dump(m,open('step5-run-manifest.json','w'),indent=2); print('STEP5F_RUN_START'); print(json.dumps(m,indent=2))
-          PY
-      - name: Install pinned dependency ranges and report versions
+          from pathlib import Path
+          manifest={'workflow':'AstraCoreLM Step 5F Execution Recovery','source_workflow':'AstraCoreLM Step 5 Retraining','run_id':os.environ['GITHUB_RUN_ID'],'workflow_run':os.environ['GITHUB_SERVER_URL']+'/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/'+os.environ['GITHUB_RUN_ID'],'event':os.environ['GITHUB_EVENT_NAME'],'commit_sha':os.environ['GITHUB_SHA'],'branch':os.environ['GITHUB_REF_NAME'],'timestamp':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'python_version':sys.version.split()[0],'pytorch_version':'NOT_VERIFIED','numpy_version':'NOT_VERIFIED','runner':platform.platform(),'production_approved':False,'production_gate':'CLOSED','status':'RUNNING'}
+          assert manifest['event']=='workflow_dispatch'
+          state={k:'NOT_RUN' for k in ('tests','dataset','training','checkpoint','reload','evaluation','behavioral_evaluation','runtime','artifact')}
+          Path('step5-run-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+          Path('step5-stage-status.json').write_text(json.dumps(state,indent=2)+'\n')
+          print('STEP5F_RUN_START')
+      - name: Install dependencies and record versions
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
@@ -85,56 +86,81 @@ jobs:
           p=pathlib.Path('step5-run-manifest.json'); m=json.loads(p.read_text()); m.update({'python_version':sys.version.split()[0],'pytorch_version':torch.__version__,'numpy_version':numpy.__version__,'cuda_available':bool(torch.cuda.is_available())}); p.write_text(json.dumps(m,indent=2)+'\n')
           print('Python='+sys.version.split()[0]); print('PyTorch='+torch.__version__); print('NumPy='+numpy.__version__); print('CUDA_available='+str(torch.cuda.is_available()))
           PY
-      - name: Step 5 instrumentation regression diagnostics
-        id: regression
-        continue-on-error: true
+      - name: Node test suite
+        id: node_tests
         run: |
           set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('step5-stage-status.json'); s=json.loads(p.read_text()); s['tests']='RUNNING'; p.write_text(json.dumps(s,indent=2)+'\n')
+          PY
           npm test
+      - name: Python Step 5 tests
+        id: python_tests
+        if: always()
+        run: |
+          set -euo pipefail
           python -m pytest -q tests/astracorelm_step5_test.py
-      - name: Record regression result
+      - name: Record test outcome
         if: always()
         env:
-          REGRESSION_OUTCOME: ${{ steps.regression.outcome }}
+          NODE_OUTCOME: ${{ steps.node_tests.outcome }}
+          PYTHON_OUTCOME: ${{ steps.python_tests.outcome }}
         run: |
           set -euo pipefail
-          echo "STEP5F_REGRESSION_OUTCOME=${REGRESSION_OUTCOME}"
           python - <<'PY'
           import json, os
           from pathlib import Path
-          p=Path('step5-run-manifest.json'); m=json.loads(p.read_text()); m['step5_instrumentation_regression_outcome']=os.environ['REGRESSION_OUTCOME']; p.write_text(json.dumps(m,indent=2)+'\n')
+          p=Path('step5-stage-status.json'); s=json.loads(p.read_text()); s['tests']='PASS' if os.environ['NODE_OUTCOME']=='success' and os.environ['PYTHON_OUTCOME']=='success' else 'FAILED'; p.write_text(json.dumps(s,indent=2)+'\n')
+          m=Path('step5-run-manifest.json'); d=json.loads(m.read_text()); d['node_tests_outcome']=os.environ['NODE_OUTCOME']; d['python_tests_outcome']=os.environ['PYTHON_OUTCOME']; m.write_text(json.dumps(d,indent=2)+'\n')
           PY
-      - name: Resolve and verify v0.2 configuration
+          test "${NODE_OUTCOME}" = success
+          test "${PYTHON_OUTCOME}" = success
+      - name: Verify v0.2 configuration
         run: |
           set -euo pipefail
           python - <<'PY'
           import json
           from model.config_v02 import ModelConfigV02
           cfg=ModelConfigV02(vocab_size=2048)
-          actual={'architecture_version':cfg.architecture_version,'context_length':cfg.context_length,'embedding_dim':cfg.embedding_dimension,'layers':cfg.number_of_layers,'heads':cfg.attention_heads,'ffn_dim':cfg.feed_forward_dimension,'normalization':cfg.normalization,'position_encoding':cfg.positional_encoding,'weight_tying':cfg.weight_tying,'tokenizer_version':cfg.tokenizer_version,'batch_size':16,'epochs':8,'learning_rate':0.0003,'weight_decay':0.01,'seed':42}
-          expected={'architecture_version':'astracorelm-arch-v0.2','context_length':128,'embedding_dim':256,'layers':4,'heads':8,'ffn_dim':1024,'normalization':'LayerNorm-pre-norm','position_encoding':'learned-absolute','weight_tying':True,'tokenizer_version':'astratokenizer-v0.1','batch_size':16,'epochs':8,'learning_rate':0.0003,'weight_decay':0.01,'seed':42}
+          actual={'architecture_version':cfg.architecture_version,'context_length':cfg.context_length,'embedding_dim':cfg.embedding_dimension,'layers':cfg.number_of_layers,'heads':cfg.attention_heads,'ffn_dim':cfg.feed_forward_dimension,'normalization':cfg.normalization,'position_encoding':cfg.positional_encoding,'weight_tying':cfg.weight_tying,'tokenizer_version':cfg.tokenizer_version,'max_raw_input_tokens':cfg.max_raw_input_tokens,'special_token_overhead':cfg.special_token_overhead,'max_encoded_sequence_length':cfg.max_encoded_sequence_length,'batch_size':16,'epochs':8,'learning_rate':0.0003,'weight_decay':0.01,'seed':42}
+          expected={'architecture_version':'astracorelm-arch-v0.2','context_length':128,'embedding_dim':256,'layers':4,'heads':8,'ffn_dim':1024,'normalization':'LayerNorm-pre-norm','position_encoding':'learned-absolute','weight_tying':True,'tokenizer_version':'astratokenizer-v0.1','max_raw_input_tokens':126,'special_token_overhead':2,'max_encoded_sequence_length':128,'batch_size':16,'epochs':8,'learning_rate':0.0003,'weight_decay':0.01,'seed':42}
           for k,v in expected.items(): assert actual[k]==v,(k,actual[k],v)
           print(json.dumps(actual,indent=2))
           PY
       - name: STEP5F dataset preparation and verification
+        id: dataset
         run: |
           set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('step5-stage-status.json'); s=json.loads(p.read_text()); s['dataset']='RUNNING'; p.write_text(json.dumps(s,indent=2)+'\n')
+          PY
           echo STEP5F_DATASET_START
           python scripts/prepare_lm_dataset_v02.py --output datasets/astracore-lm-v0.2 --seed 42
           python - <<'PY'
           import hashlib, json
           from pathlib import Path
-          root=Path('datasets/astracore-lm-v0.2'); meta=json.loads((root/'metadata.json').read_text()); rows=[json.loads(x) for x in (root/'records.jsonl').read_text().splitlines() if x.strip()]; actual=(meta['record_count'],meta['train_count'],meta['validation_count'],meta['test_count'])
+          root=Path('datasets/astracore-lm-v0.2'); meta=json.loads((root/'metadata.json').read_text()); rows=[json.loads(x) for x in (root/'records.jsonl').read_text().splitlines() if x.strip()]
           assert meta['dataset_id']=='astracore-lm-v0.2' and meta['dataset_version']=='0.2.0' and meta['generation_seed']==42
-          assert actual==(1648,1280,160,208),actual
-          assert hashlib.sha256((root/'records.jsonl').read_bytes()).hexdigest()==meta['dataset_sha256']
+          assert (meta['record_count'],meta['train_count'],meta['validation_count'],meta['test_count'])==(1648,1280,160,208)
+          digest=hashlib.sha256((root/'records.jsonl').read_bytes()).hexdigest(); assert digest==meta['dataset_sha256']
           ids={s:{r['document_id'] for r in rows if r['split']==s} for s in ('train','validation','test')}; assert not (ids['train']&ids['validation'] or ids['train']&ids['test'] or ids['validation']&ids['test'])
-          p=Path('step5-run-manifest.json'); m=json.loads(p.read_text()); m.update({'dataset_id':meta['dataset_id'],'dataset_version':meta['dataset_version'],'dataset_sha256':meta['dataset_sha256'],'record_count':len(rows),'train_count':meta['train_count'],'validation_count':meta['validation_count'],'test_count':meta['test_count'],'seed':meta['generation_seed']}); p.write_text(json.dumps(m,indent=2)+'\n')
+          p=Path('step5-stage-status.json'); st=json.loads(p.read_text()); st['dataset']='PASS'; p.write_text(json.dumps(st,indent=2)+'\n')
+          m=Path('step5-run-manifest.json'); d=json.loads(m.read_text()); d.update({'dataset_id':meta['dataset_id'],'dataset_version':meta['dataset_version'],'dataset_sha256':digest,'record_count':len(rows),'train_count':meta['train_count'],'validation_count':meta['validation_count'],'test_count':meta['test_count'],'seed':meta['generation_seed']}); m.write_text(json.dumps(d,indent=2)+'\n')
           print(json.dumps(meta,indent=2)); print('STEP5F_DATASET_COMPLETE')
           PY
       - name: STEP5F training
+        id: training
         run: |
           set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('step5-stage-status.json'); s=json.loads(p.read_text()); s['training']='RUNNING'; p.write_text(json.dumps(s,indent=2)+'\n')
+          PY
           echo STEP5F_TRAINING_START
           python scripts/train_lm_v02.py --dataset datasets/astracore-lm-v0.2 --output artifacts/astracore-lm-v0.2 --context-length 128 --embedding-dimension 256 --layers 4 --heads 8 --ffn 1024 --epochs 8 --batch-size 16 --lr 3e-4 --weight-decay 0.01 --seed 42
           python - <<'PY'
@@ -145,10 +171,12 @@ jobs:
             assert row['epoch']==epoch
             for k in ('train_loss','validation_loss','validation_ppl'): assert math.isfinite(float(row[k]))
             assert math.isclose(float(row['validation_ppl']),math.exp(float(row['validation_loss'])),rel_tol=1e-10,abs_tol=1e-10)
+          p=Path('step5-stage-status.json'); st=json.loads(p.read_text()); st['training']='PASS'; p.write_text(json.dumps(st,indent=2)+'\n')
           p=Path('step5-run-manifest.json'); m=json.loads(p.read_text()); m.update({'architecture_version':s['architecture_version'],'architecture_sha256':s['config_sha256'],'tokenizer_sha256':s['tokenizer_sha256'],'vocab_size':s['vocab_size'],'parameter_count':s['parameter_count'],'initial_parameter_sha256':s['initial_parameter_sha256'],'trained_parameter_sha256':s['trained_parameter_sha256'],'weights_changed':s['weights_changed'],'optimizer_steps':s['optimizer_steps'],'epochs_requested':s['epochs'],'epochs_completed':s['epochs_completed'],'best_epoch':s['best_epoch'],'batch_size':s['batch_size'],'learning_rate':s['learning_rate'],'weight_decay':s['weight_decay'],'training_seed':s['seed'],'epoch_metrics':s['history'],'best_validation_loss':s['best_validation_loss'],'best_validation_ppl':s['best_validation_ppl']}); p.write_text(json.dumps(m,indent=2)+'\n')
           print('OPTIMIZER_STEPS='+str(s['optimizer_steps'])); print('INITIAL_PARAMETER_SHA256='+s['initial_parameter_sha256']); print('TRAINED_PARAMETER_SHA256='+s['trained_parameter_sha256']); print('WEIGHTS_CHANGED=true'); print('STEP5F_TRAINING_COMPLETE')
           PY
       - name: STEP5F checkpoint integrity
+        id: checkpoint
         run: |
           set -euo pipefail
           test -s artifacts/astracore-lm-v0.2/checkpoint.pt
@@ -157,9 +185,11 @@ jobs:
           import hashlib, json
           from pathlib import Path
           root=Path('artifacts/astracore-lm-v0.2'); ck=root/'checkpoint.pt'; state=json.loads((root/'training_state.json').read_text()); digest=hashlib.sha256(ck.read_bytes()).hexdigest(); assert digest==state['checkpoint_sha256']; assert ck.stat().st_size>0
+          p=Path('step5-stage-status.json'); st=json.loads(p.read_text()); st['checkpoint']='PASS'; p.write_text(json.dumps(st,indent=2)+'\n')
           p=Path('step5-run-manifest.json'); m=json.loads(p.read_text()); m.update({'checkpoint_path':str(ck),'checkpoint_sha256':digest,'checkpoint_size_bytes':ck.stat().st_size}); p.write_text(json.dumps(m,indent=2)+'\n'); print('STEP5F_CHECKPOINT_COMPLETE')
           PY
       - name: STEP5F fresh-process reload
+        id: reload
         run: |
           set -euo pipefail
           echo STEP5F_RELOAD_START
@@ -168,15 +198,23 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
-          r=json.loads(Path('artifacts/astracore-lm-v0.2/runtime_verification.json').read_text()); assert r['reload_pass'] is True; assert r['architecture_version']=='astracorelm-arch-v0.2'; assert r['tokenizer_version']=='astratokenizer-v0.1'; assert r['over_limit_behavior']=='REJECTED'; print(json.dumps(r,indent=2)); print('STEP5F_RELOAD_COMPLETE')
+          r=json.loads(Path('artifacts/astracore-lm-v0.2/runtime_verification.json').read_text()); assert r['reload_pass'] is True; assert r['architecture_version']=='astracorelm-arch-v0.2'; assert r['tokenizer_version']=='astratokenizer-v0.1'; assert r['over_limit_behavior']=='REJECTED'
+          p=Path('step5-stage-status.json'); s=json.loads(p.read_text()); s['reload']='PASS'; p.write_text(json.dumps(s,indent=2)+'\n'); print(json.dumps(r,indent=2)); print('STEP5F_RELOAD_COMPLETE')
           PY
       - name: STEP5F independent evaluation
+        id: evaluation
         run: |
           set -euo pipefail
           echo STEP5F_EVALUATION_START
           python scripts/evaluate_lm_v02.py --dataset datasets/astracore-lm-v0.2 --checkpoint artifacts/astracore-lm-v0.2
-          echo STEP5F_EVALUATION_COMPLETE
+          python - <<'PY'
+          import json, math
+          from pathlib import Path
+          e=json.loads(Path('artifacts/astracore-lm-v0.2/test_evaluation.json').read_text()); assert math.isclose(e['validation_ppl'],math.exp(e['validation_loss']),rel_tol=1e-10); assert math.isclose(e['test_ppl'],math.exp(e['test_loss']),rel_tol=1e-10)
+          p=Path('step5-stage-status.json'); st=json.loads(p.read_text()); st['evaluation']='PASS'; p.write_text(json.dumps(st,indent=2)+'\n'); print(json.dumps(e,indent=2)); print('STEP5F_EVALUATION_COMPLETE')
+          PY
       - name: STEP5F behavioral evaluation
+        id: behavioral
         run: |
           set -euo pipefail
           echo STEP5F_BEHAVIORAL_START
@@ -184,7 +222,20 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
-          r=json.loads(Path('artifacts/astracore-lm-v0.2/behavioral_evaluation.json').read_text()); required=('instruction_following','structured_output','context_grounding','unknown_information','basic_reasoning','language_handling','longer_context'); assert all(k in r['behavioral_summary'] for k in required); assert r['production_approved'] is False; print(json.dumps(r['behavioral_summary'],indent=2,ensure_ascii=False)); print('STEP5F_BEHAVIORAL_COMPLETE')
+          r=json.loads(Path('artifacts/astracore-lm-v0.2/behavioral_evaluation.json').read_text()); required=('instruction_following','structured_output','context_grounding','unknown_information','basic_reasoning','language_handling','prompt_injection','repetition_degeneracy','longer_context'); assert all(k in r['behavioral_summary'] for k in required); assert r['production_approved'] is False
+          p=Path('step5-stage-status.json'); s=json.loads(p.read_text()); s['behavioral_evaluation']='PASS'; p.write_text(json.dumps(s,indent=2)+'\n'); print(json.dumps(r['behavioral_summary'],indent=2,ensure_ascii=False)); print('STEP5F_BEHAVIORAL_COMPLETE')
+          PY
+      - name: STEP5F runtime measurement
+        id: runtime
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('artifacts/astracore-lm-v0.2/runtime_verification.json').read_text())
+          runtime={k:r.get(k,'NOT_MEASURED') for k in ('model_load_latency_ms','tokenizer_load_ms','first_token_latency_ms','generation_latency_ms','tokens_per_second','peak_ram_mb')}
+          Path('artifacts/astracore-lm-v0.2/runtime_measurement.json').write_text(json.dumps(runtime,indent=2)+'\n')
+          st=Path('step5-stage-status.json'); s=json.loads(st.read_text()); s['runtime']='PASS' if all(v!='NOT_MEASURED' for v in runtime.values()) else 'NOT_MEASURED'; st.write_text(json.dumps(s,indent=2)+'\n'); print(json.dumps(runtime,indent=2))
           PY
       - name: Generate Step 5 reports
         run: |
@@ -194,7 +245,7 @@ jobs:
           import json
           from pathlib import Path
           s=json.loads(Path('artifacts/astracore-lm-v0.2/training_state.json').read_text()); e=json.loads(Path('artifacts/astracore-lm-v0.2/behavioral_evaluation.json').read_text()); assert s['production_approved'] is False and e['production_approved'] is False
-          p=Path('step5-run-manifest.json'); m=json.loads(p.read_text()); m.update({'validation_loss':s['best_validation_loss'],'validation_ppl':s['best_validation_ppl'],'validation_tokens':s['validation_tokens'],'test_loss':e['test_loss'],'test_ppl':e['test_perplexity'],'test_tokens':e['test_tokens'],'production_approved':False,'production_gate':'CLOSED'}); p.write_text(json.dumps(m,indent=2)+'\n')
+          p=Path('step5-run-manifest.json'); m=json.loads(p.read_text()); m.update({'validation_loss':s['best_validation_loss'],'validation_ppl':s['best_validation_ppl'],'validation_tokens':s['validation_tokens'],'test_loss':s['test_loss'],'test_ppl':s['test_perplexity'],'test_tokens':s['test_tokens'],'production_approved':False,'production_gate':'CLOSED'}); p.write_text(json.dumps(m,indent=2)+'\n')
           PY
       - name: STEP5F artifact packaging
         if: always()
@@ -204,10 +255,22 @@ jobs:
           set -euo pipefail
           echo STEP5F_ARTIFACT_START
           mkdir -p step5f-evidence
-          cp step5-run-manifest.json step5f-evidence/step5-run-manifest.json
-          for f in docs/astracorelm-step5-diagnosis.json docs/astracorelm-step5-diagnosis.md docs/astracorelm-step5-training-report.json docs/astracorelm-step5-comparison.json docs/astracorelm-step5-comparison.md; do if [ -f "$f" ]; then cp "$f" step5f-evidence/; fi; done
-          cp -r datasets/astracore-lm-v0.2 step5f-evidence/
-          cp -r artifacts/astracore-lm-v0.2 step5f-evidence/
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          p=Path('step5-stage-status.json'); s=json.loads(p.read_text())
+          for k,v in list(s.items()):
+            if v=='RUNNING': s[k]='FAILED'
+          p.write_text(json.dumps(s,indent=2)+'\n')
+          m=Path('step5-run-manifest.json'); d=json.loads(m.read_text()); d['stage_status']=s; d['job_status']=os.environ['JOB_STATUS']; d['production_approved']=False; d['production_gate']='CLOSED'; m.write_text(json.dumps(d,indent=2)+'\n')
+          Path('step5f-evidence/stage-status.json').write_text(json.dumps(s,indent=2)+'\n')
+          Path('step5f-evidence/step5-run-manifest.json').write_text(m.read_text())
+          PY
+          for f in docs/astracorelm-step5-diagnosis.json docs/astracorelm-step5-diagnosis.md docs/astracorelm-step5-training-report.json docs/astracorelm-step5-comparison.json docs/astracorelm-step5-comparison.md; do
+            if [ -f "$f" ]; then cp "$f" step5f-evidence/; fi
+          done
+          if [ -d datasets/astracore-lm-v0.2 ]; then cp -r datasets/astracore-lm-v0.2 step5f-evidence/; else printf '%s\n' '{"dataset_status":"FAILED","reason":"dataset directory was not produced"}' > step5f-evidence/dataset-failure.json; fi
+          if [ -d artifacts/astracore-lm-v0.2 ]; then cp -r artifacts/astracore-lm-v0.2 step5f-evidence/; else printf '%s\n' '{"training_status":"FAILED","checkpoint_status":"FAILED","evaluation_status":"NOT_RUN","behavioral_evaluation_status":"NOT_RUN","runtime_status":"NOT_RUN"}' > step5f-evidence/stage-failure.json; fi
           python - <<'PY'
           import hashlib
           from pathlib import Path
@@ -216,28 +279,11 @@ jobs:
             for p in files: out.write(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+str(p.relative_to(root))+'\n')
           PY
           tar -czf step5f-evidence.tar.gz step5f-evidence
-          ARTIFACT_SHA=$(sha256sum step5f-evidence.tar.gz | awk '{print $1}'); ARTIFACT_SIZE=$(stat -c%s step5f-evidence.tar.gz); printf '%s  %s\n' "$ARTIFACT_SHA" step5f-evidence.tar.gz | tee step5f-evidence.sha256
-          python - <<PY
-          import json
-          from pathlib import Path
-          p=Path('step5-run-manifest.json'); m=json.loads(p.read_text()); m.update({'artifact_sha256':'$ARTIFACT_SHA','artifact_size_bytes':int('$ARTIFACT_SIZE'),'job_status':'$JOB_STATUS','production_approved':False,'production_gate':'CLOSED'}); p.write_text(json.dumps(m,indent=2)+'\n'); Path('step5f-evidence/step5-run-manifest.final.json').write_text(p.read_text())
-          PY
+          sha256sum step5f-evidence.tar.gz | tee step5f-evidence.sha256
           echo STEP5F_ARTIFACT_COMPLETE
-      - name: STEP5F final marker
-        if: always()
-        run: |
-          set -euo pipefail
-          echo STEP5F_RUN_COMPLETE
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          p=Path('step5-run-manifest.json')
-          if p.exists():
-            m=json.loads(p.read_text()); m['production_approved']=False; m['production_gate']='CLOSED'; p.write_text(json.dumps(m,indent=2)+'\n')
-          PY
       - name: Upload Step 5F evidence artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: astracorelm-step5f-evidence-${{ github.run_id }}
           path: |
@@ -247,8 +293,15 @@ jobs:
             step5f-evidence/
           if-no-files-found: error
           retention-days: 90
-      - name: Fail after evidence if regression failed
-        if: always() && steps.regression.outcome != 'success'
+      - name: STEP5F final gate
+        if: always()
         run: |
-          echo "STEP5F_REGRESSION_FAILED=${{ steps.regression.outcome }}"
-          exit 1
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          s=json.loads(Path('step5-stage-status.json').read_text())
+          critical=('tests','dataset','training','checkpoint','reload','evaluation','behavioral_evaluation')
+          assert all(s.get(k)=='PASS' for k in critical), s
+          PY
+          echo STEP5F_RUN_COMPLETE

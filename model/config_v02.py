@@ -15,11 +15,11 @@ class ModelConfigV02:
     weight_tying: bool = True
     tokenizer_version: str = 'astratokenizer-v0.1'
     tokenizer_sha256: str = ''
+    special_token_overhead: int = 2
     max_encoded_sequence_length: int = 128
+    max_raw_input_tokens: int = 126
 
-    def to_dict(self):
-        return self.__dict__.copy()
+    def to_dict(self): return self.__dict__.copy()
 
     @classmethod
-    def from_dict(cls, payload):
-        return cls(**payload)
+    def from_dict(cls, payload): return cls(**payload)

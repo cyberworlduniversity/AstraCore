@@ -13,30 +13,58 @@ jobs:
     if: "!contains(github.event.head_commit.message, '[production-hardening-complete]')"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Remove unsafe Vercel bootstrap fallback
+      - uses: actions/checkout@v5
+      - name: Verify or remove unsafe Vercel bootstrap fallback
+        shell: bash
         run: |
+          set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
           p = Path('api/[...path].js')
+          if not p.exists():
+              raise SystemExit('api/[...path].js is missing')
           s = p.read_text()
-          start = s.index('const BOOTSTRAP_CORPUS=')
-          end = s.index('function json(', start)
-          s = s[:start] + s[end:]
-          old = "try{engines[id]=await loadCheckpoint(c.checkpoint,{Model:NeuralLanguageModel,Tokenizer:CharacterTokenizer})}catch{engines[id]=bootstrapEngine()}"
-          new = "try{engines[id]=await loadCheckpoint(c.checkpoint,{Model:NeuralLanguageModel,Tokenizer:CharacterTokenizer,requireProductionReady:true})}catch{delete engines[id]}"
-          if old not in s:
-              raise SystemExit('expected fallback loader not found')
-          s = s.replace(old, new)
-          s = s.replace("const DEFAULT_CHECKPOINT='data/checkpoints/astracore-demo.json';", "const DEFAULT_CHECKPOINT='data/checkpoints/astracorelm-v1.0.json';")
-          p.write_text(s)
+          original = s
+          unsafe_markers = ('const BOOTSTRAP_CORPUS=', 'bootstrapEngine(', 'data/checkpoints/astracore-demo.json')
+          if not any(marker in s for marker in unsafe_markers):
+              print('ALREADY_HARDENED: no bootstrap corpus, bootstrap engine, or demo default checkpoint found')
+          else:
+              if 'const BOOTSTRAP_CORPUS=' in s:
+                  start = s.index('const BOOTSTRAP_CORPUS=')
+                  end = s.find('function json(', start)
+                  if end < 0:
+                      raise SystemExit('unsafe bootstrap corpus found but current source structure has no safe removal boundary')
+                  s = s[:start] + s[end:]
+              old = "try{engines[id]=await loadCheckpoint(c.checkpoint,{Model:NeuralLanguageModel,Tokenizer:CharacterTokenizer})}catch{engines[id]=bootstrapEngine()}"
+              new = "try{engines[id]=await loadCheckpoint(c.checkpoint,{Model:NeuralLanguageModel,Tokenizer:CharacterTokenizer,requireProductionReady:true})}catch{delete engines[id]}"
+              if old in s:
+                  s = s.replace(old, new)
+              elif 'bootstrapEngine(' in s:
+                  raise SystemExit('unsafe bootstrap engine remains but its current loader structure is unknown; inspect before editing')
+              if "data/checkpoints/astracore-demo.json" in s:
+                  s = s.replace("data/checkpoints/astracore-demo.json", "")
+              p.write_text(s)
+              print('HARDENED_CURRENT_SOURCE')
+          final = p.read_text()
+          assert 'const BOOTSTRAP_CORPUS=' not in final
+          assert 'bootstrapEngine(' not in final
+          assert "data/checkpoints/astracore-demo.json" not in final
+          assert 'requireProductionReady:true' in final
+          if final != original:
+              print('SECURITY_CHANGE_REQUIRED_AND_APPLIED')
+          else:
+              print('SECURITY_INVARIANT_ALREADY_SATISFIED')
           PY
-      - name: Remove one-time workflow
-        run: rm .github/workflows/one-time-production-hardening.yml
-      - name: Commit hardening
+      - name: Commit hardening only when a change was required
+        shell: bash
         run: |
+          set -euo pipefail
+          if git diff --quiet -- api/[...path].js; then
+            echo 'NO_CHANGE_NEEDED: workflow is idempotent'
+            exit 0
+          fi
           git config user.name 'AstraCore Bot'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add api/[...path].js .github/workflows/one-time-production-hardening.yml
+          git add api/[...path].js
           git commit -m 'security: remove production model bootstrap fallback [production-hardening-complete]'
           git push

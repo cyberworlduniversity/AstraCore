@@ -1,6 +1,9 @@
 import argparse, hashlib, json, random
 from pathlib import Path
-from scripts.generate_lm_dataset import CONCEPTS
+try:
+    from .generate_lm_dataset import CONCEPTS
+except ImportError:
+    from generate_lm_dataset import CONCEPTS
 
 BASE_TEMPLATES = [
     'Question: What is {name}?\nAnswer: {fact}',
@@ -21,13 +24,11 @@ BASE_TEMPLATES = [
     'Instruction: Explain {name} without inventing facts.\nResponse: {fact}',
 ]
 
-
 def digest_rows(rows):
     h = hashlib.sha256()
     for row in rows:
         h.update((json.dumps(row, ensure_ascii=False, sort_keys=True) + '\n').encode())
     return h.hexdigest()
-
 
 def main():
     p = argparse.ArgumentParser()
@@ -60,9 +61,7 @@ def main():
                 'content_sha256': hashlib.sha256(text.encode()).hexdigest(),
             })
     records.sort(key=lambda r: r['id'])
-    root.joinpath('records.jsonl').write_text(
-        ''.join(json.dumps(r, ensure_ascii=False, sort_keys=True) + '\n' for r in records), encoding='utf-8'
-    )
+    root.joinpath('records.jsonl').write_text(''.join(json.dumps(r, ensure_ascii=False, sort_keys=True) + '\n' for r in records), encoding='utf-8')
     for split in groups:
         rows = [r['text'] for r in records if r['split'] == split]
         root.joinpath(f'{split}.txt').write_text('\n\n'.join(rows) + '\n', encoding='utf-8')

@@ -13,13 +13,29 @@ from scripts.train_lm_v02 import parameter_fingerprint
 
 def test_bos_eos_contract_and_context_boundaries():
     tok=AstraTokenizer.build(['hello world cyber security'],128)
-    cfg=ModelConfigV02(vocab_size=tok.vocab_size,context_length=8,tokenizer_sha256='x')
+    cfg=ModelConfigV02(vocab_size=tok.vocab_size,context_length=8,tokenizer_sha256='x',max_raw_input_tokens=6)
     model=AstraCoreLMV02(cfg)
     ids=torch.tensor([tok.encode('hello')],dtype=torch.long)
-    assert ids.shape[1] <= 8
+    assert ids.shape[1] == 3
+    assert cfg.special_token_overhead == 2
+    assert cfg.max_raw_input_tokens == 6
+    assert ids.shape[1] <= cfg.max_encoded_sequence_length
     model(ids)
     with pytest.raises(ValueError, match='CONTEXT_LENGTH_EXCEEDED'):
         model(torch.zeros((1,9),dtype=torch.long))
+
+
+def test_bos_eos_context_contract_rejects_overlong_raw_input():
+    tok=AstraTokenizer.build(['one two three four five six seven eight nine ten'],128)
+    cfg=ModelConfigV02(vocab_size=tok.vocab_size,context_length=8,tokenizer_sha256='x',max_raw_input_tokens=6)
+    raw='one two three four five six seven'
+    raw_token_count=len(tok.tokens(raw))
+    assert raw_token_count == 7
+    encoded=tok.encode(raw)
+    assert len(encoded) == raw_token_count + cfg.special_token_overhead
+    assert len(encoded) > cfg.max_encoded_sequence_length
+    with pytest.raises(ValueError, match='RAW_INPUT_TOKENS_EXCEEDED'):
+        tok.encode_for_context(raw,cfg.max_raw_input_tokens,cfg.context_length)
 
 
 def test_loss_shift_is_next_token_and_padding_is_ignored():
@@ -32,13 +48,15 @@ def test_loss_shift_is_next_token_and_padding_is_ignored():
     assert torch.isfinite(loss)
 
 
-def test_causal_mask_blocks_future_positions():
+def test_causal_mask_blocks_future_positions_and_allows_past_current():
     cfg=ModelConfigV02(vocab_size=16,context_length=8,tokenizer_sha256='x')
     model=AstraCoreLMV02(cfg)
     _,mask,_=model._masks(torch.tensor([[1,2,3,4]]))
-    assert mask[0,1].item() is False
-    assert mask[0,2].item() is True
+    assert mask[0,1].item() is True
+    assert mask[1,0].item() is False
+    assert mask[1,1].item() is False
     assert mask[3,0].item() is False
+    assert mask[3,3].item() is False
 
 
 def test_padding_is_not_a_valid_target():
@@ -50,17 +68,21 @@ def test_padding_is_not_a_valid_target():
     assert torch.isfinite(loss)
 
 
-def test_tokenizer_round_trip_special_tokens_and_tamil():
-    tok=AstraTokenizer.build(['Hello, 123 cyber security. தமிழ் சோதனை'],128)
-    ids=tok.encode('Hello, 123 cyber security. தமிழ் சோதனை')
-    assert ids[0] == tok.bos_id and ids[-1] == tok.eos_id
-    decoded=tok.decode(ids)
-    assert 'hello' in decoded and 'தமிழ்' in decoded
+def test_tokenizer_round_trip_special_tokens_unicode_tamil_and_mixed_text():
+    samples=['தமிழ் சோதனை','வணக்கம் AstraCore 123!','Cyber பாதுகாப்பு 2026.','  தமிழ்\tEnglish\nசோதனை  ']
+    tok=AstraTokenizer.build(samples,128)
+    for text in samples:
+        ids=tok.encode(text)
+        assert ids[0] == tok.bos_id and ids[-1] == tok.eos_id
+        decoded=tok.decode(ids)
+        expected=' '.join(tok.tokens(text))
+        assert decoded == expected
+        assert '<unk>' not in decoded
 
 
 def test_generation_rejects_context_overflow():
     tok=AstraTokenizer.build(['hello world'],32)
-    cfg=ModelConfigV02(vocab_size=tok.vocab_size,context_length=4,tokenizer_sha256='x')
+    cfg=ModelConfigV02(vocab_size=tok.vocab_size,context_length=4,tokenizer_sha256='x',max_raw_input_tokens=2)
     model=AstraCoreLMV02(cfg)
     ids=torch.tensor([[tok.bos_id,2,3,4,5]],dtype=torch.long)
     with pytest.raises(ValueError, match='CONTEXT_LENGTH_EXCEEDED'):
