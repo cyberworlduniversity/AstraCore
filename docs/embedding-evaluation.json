@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "benchmark_pairs": 600,
+  "held_out_pairs": 120,
+  "embedding_dim": 384,
+  "mean_positive_cosine": 0.9062895178794861,
+  "recall_at_1": 0.8833333253860474,
+  "recall_at_5": 1.0,
+  "recall_at_10": 1.0,
+  "mrr": 0.9416666626930237,
+  "top1_accuracy": 0.8833333253860474,
+  "checkpoint_sha256": "81a002c3706c63226515442e3c58af57febd0bd3c3e765230c616a8bffa0b45b"
+}
