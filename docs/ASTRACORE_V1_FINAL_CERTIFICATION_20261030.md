@@ -2,72 +2,56 @@
 
 **Date:** 2026-10-30  
 **Repository:** `cyberworlduniversity/AstraCore`  
-**Certified head:** `ab4f02e722d034067ea3440cfbb99b219f1f8a13`
+**Step 3 training head:** `b95920510118e924ea8c04677a1f9ebab6821029`
 
-## Final decision
+## Final platform decision
 
 **PRODUCTION BLOCKED**
-
-This execution did not weaken certification thresholds or convert missing runtime evidence into PASS.
 
 ## Gate status
 
 | Gate | Status | Evidence / blocker |
 |---|---|---|
-| LM | PRODUCTION BLOCKED | Current AstraCoreLM evidence: validation loss 39.03763198852539 / PPL 89914174044382900 from a single-document training run with 0 independent validation documents; no current independent test loss/PPL; no committed checkpoint path/hash or tokenizer hash; Supabase registry records `astracorelm-v0.1` as `untrained` with no checkpoint path. Architecture metadata also conflicts with current repository defaults, so checkpoint compatibility cannot be certified. |
+| LM | EXPERIMENTAL_CHECKPOINT_READY / NOT APPROVED | Genuine v0.1 checkpoint trained and independently evaluated. Validation loss 12.591744422912598 / PPL 294120.3813569566; test loss 12.97492504119873 / PPL 431457.82366694347. Checkpoint SHA and tokenizer SHA are recorded. Formal production approval remains closed. |
 | EMBEDDING | PASS | 600-pair benchmark; held-out 120-pair evaluation; R@1 88.33%, R@5 100%, R@10 100%, MRR 94.17%, mean positive cosine 0.9063. |
-| RAG | BLOCKED | Hybrid keyword/semantic search hardened and owner-filtered, but complete authenticated live E2E evidence is still missing. |
-| MEMORY | BLOCKED | Isolation architecture exists; required two-user runtime evidence not completed. |
-| TOOLS | BLOCKED | Registry/security policy exists, but several tools remain explicitly not implemented. |
-| MULTIMODAL | BLOCKED | Extractor exists; complete real-file matrix evidence missing. |
-| WEB | BLOCKED | Live search/fetch/citation and injection tests not fully executed. |
-| CODING | BLOCKED | Sandboxed execution/patch verification evidence incomplete. |
+| RAG | BLOCKED | Complete authenticated live E2E evidence still missing. |
+| MEMORY | BLOCKED | Required two-user runtime evidence not completed. |
+| TOOLS | BLOCKED | Several tools remain explicitly unimplemented. |
+| MULTIMODAL | BLOCKED | Complete real-file matrix evidence missing. |
+| WEB | BLOCKED | Live search/fetch/citation and injection tests incomplete. |
+| CODING | BLOCKED | Sandboxed execution/patch verification incomplete. |
 | AGENTS | BLOCKED | Bounded execution/failure-recovery evidence incomplete. |
-| SAFETY | BLOCKED | Safety layer exists; complete adversarial suite not executed. |
-| EVALUATION | BLOCKED | Full cross-capability evaluation matrix incomplete. |
-| API | BLOCKED | Existing tests passed previously; complete post-change API security matrix not rerun. |
-| DATABASE | PASS | Supabase healthy; migrations applied; FK/index/RLS/RAG hardening applied. |
-| AUTH | BLOCKED | Authentication exists; leaked-password protection remains externally disabled. |
-| OBSERVABILITY | BLOCKED | Infrastructure exists; full production verification incomplete. |
-| RELIABILITY | BLOCKED | Full restart/dependency failure matrix incomplete. |
-| UI | BLOCKED | Existing UI preserved; fresh complete responsive E2E evidence incomplete. |
-| SECURITY | BLOCKED | Major hardening applied, but external password-protection configuration and incomplete adversarial execution remain. |
-| DEPLOYMENT | BLOCKED | Current-head deployment returned Vercel `402 api-deployments-free-per-day`, retry after 86400s. |
-| ROLLBACK | BLOCKED | Prior production deployments are rollback candidates, but rollback execution was not verified. |
+| SAFETY | BLOCKED | Complete adversarial suite not executed. |
+| EVALUATION | BLOCKED | Full cross-capability matrix incomplete. |
+| API | BLOCKED | Full post-change API security matrix incomplete. |
+| DATABASE | PASS | Supabase healthy; security/RLS migrations applied. |
+| AUTH | BLOCKED | Leaked-password protection remains external configuration blocker. |
+| OBSERVABILITY | BLOCKED | Full production verification incomplete. |
+| RELIABILITY | BLOCKED | Full restart/dependency matrix incomplete. |
+| UI | BLOCKED | Fresh complete responsive E2E evidence incomplete. |
+| SECURITY | BLOCKED | Adversarial/runtime evidence incomplete. |
+| DEPLOYMENT | BLOCKED | Vercel deployment quota returned HTTP 402. |
+| ROLLBACK | BLOCKED | Rollback execution not verified. |
 
-## AstraCoreLM Step 2 certification
+## AstraCoreLM Step 3
 
-The dedicated machine-readable evidence is `docs/astracorelm-certification.json`. The model remains **EXPERIMENTAL / PRODUCTION_BLOCKED**. No checkpoint hash, tokenizer hash, approval, or test metric has been fabricated. The production gate remains intact and experimental inference cannot be promoted.
+The Step 3 result is **EXPERIMENTAL_CHECKPOINT_READY**. The artifact was created from the existing AstraCoreLM architecture, not an external model. The deterministic dataset contains 1,236 records across 103 source concepts with a concept-level 960/120/156 split and seed 42. The workflow verified disjoint source documents and duplicate/content-hash checks.
 
-## Work completed
+Checkpoint SHA-256: `0e1461c110eae7b055b041cb535f2182dec71834cbaf14f68e0e79be460eee3f`  
+Tokenizer SHA-256: `0beaf889d4d7bf49d90a970f50dd56b14eeb54453851501722b0fded2aedd8a2`  
+Config SHA-256: `a2c61b0a42cacba801a0100853028d680913ef5b762cdbb7026ef9ac3c872752`  
+Artifact ID: `12991290210`
 
-- Preserved the existing AstraCore architecture.
-- Added a dedicated AstraCoreLM checkpoint certification artifact with explicit blocked/not-executed states.
-- Updated the production certification record with the current LM evidence instead of the older 10.0984 / 10.1959 loss run.
-- Preserved the production gate requiring checkpoint/tokenizer identity, evaluation evidence, production approval, expiry and revocation checks.
-- Preserved the hardened no-bootstrap production behavior.
-- Verified the deterministic LM unit-test coverage exists for tokenizer roundtrip, model dimensions/loss and bounded generation.
-- Produced this evidence-based certification instead of treating source-code presence as production evidence.
+The checkpoint was reloaded from disk and independently evaluated after reload. Node tests: 56/56 passed. Python tests: 14/14 passed. Training, split validation, checkpoint reload, independent evaluation and experimental-only checks all passed in the dedicated workflow.
+
+## Production gate
+
+`requireProductionReady: true` remains unchanged. No production approval was granted. No fallback/tiny/bootstrap model was introduced. `/api/chat` was not opened for this experimental checkpoint.
 
 ## Database
 
-Supabase project `pmqdghauotnxxrupglvz` is `ACTIVE_HEALTHY` in `eu-west-1`. Current migration inventory includes the hybrid knowledge-search hardening and RLS optimization migrations applied during this execution.
+Supabase project `pmqdghauotnxxrupglvz` remains `ACTIVE_HEALTHY`. The model registry now records AstraCoreLM v0.1 as `experimental`, with real checkpoint/tokenizer/config hashes and evaluation evidence. The registry status constraint was extended to represent the experimental lifecycle state explicitly; `ready` was not used as a substitute for production approval.
 
-## Deployment
+## Required next step
 
-The latest verified READY deployment is older than the certification head. A new production deployment of the current head was attempted and Vercel returned:
-
-`402 payment_required — api-deployments-free-per-day — retryAfter 86400 seconds`
-
-Therefore deployment is **BLOCKED**, not PASS.
-
-## Required external actions
-
-1. Resolve the Vercel deployment quota before deploying the certified head.
-2. Enable Supabase Auth leaked-password protection through the available Auth configuration/dashboard.
-3. After deployment, execute authenticated RAG, memory-isolation, tool-sandbox, multimodal, web-injection, coding, agent-failure, API, UI/E2E, observability and rollback verification.
-4. Do not promote AstraCoreLM until model-quality and checkpoint-identity gates are genuinely satisfied.
-
-## Rollback procedure
-
-Use the previous verified Vercel production deployment identified as a rollback candidate, verify its commit SHA and health endpoint, then re-run authentication/API/database/security smoke tests before restoring traffic. Do not treat the existence of a rollback candidate as proof that rollback has been executed successfully.
+Step 4 must independently assess production-quality criteria, runtime/resource/security failure cases, broader generation tests, and formal approval metadata. Until that happens, AstraCoreLM remains experimental and the AstraCore platform remains production-blocked.
