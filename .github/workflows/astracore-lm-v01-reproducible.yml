@@ -1,0 +1,91 @@
+name: AstraCoreLM v0.1 Reproducible Training
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'model/**'
+      - 'scripts/prepare_lm_dataset_v01.py'
+      - 'scripts/train_lm_v01.py'
+      - 'scripts/evaluate_lm_v01.py'
+      - 'scripts/generate_lm_dataset.py'
+      - 'requirements.txt'
+      - '.github/workflows/astracore-lm-v01-reproducible.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  PYTHONPATH: .
+jobs:
+  reproducible-training:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Baseline tests
+        run: |
+          npm test
+          python -m pytest -q tests
+      - name: Prepare deterministic dataset
+        run: python scripts/prepare_lm_dataset_v01.py --output datasets/astracore-lm-v0.1 --seed 42
+      - name: Validate split and provenance
+        run: |
+          python - <<'PY'
+          import json, hashlib
+          from pathlib import Path
+          root=Path('datasets/astracore-lm-v0.1')
+          m=json.loads((root/'metadata.json').read_text())
+          assert (m['train_count'],m['validation_count'],m['test_count'])==(960,120,120),m
+          rows=[json.loads(x) for x in (root/'records.jsonl').read_text().splitlines() if x.strip()]
+          sets={s:{r['document_id'] for r in rows if r['split']==s} for s in ('train','validation','test')}
+          assert not (sets['train']&sets['validation'] or sets['train']&sets['test'] or sets['validation']&sets['test'])
+          assert all(r['license']=='CC0-1.0' and r.get('content_sha256') for r in rows)
+          assert hashlib.sha256((root/'records.jsonl').read_bytes()).hexdigest()
+          print(json.dumps(m,indent=2))
+          PY
+      - name: Train AstraCoreLM v0.1
+        run: >-
+          python scripts/train_lm_v01.py
+          --dataset datasets/astracore-lm-v0.1
+          --output artifacts/astracore-lm-v0.1
+          --vocab-size 4096
+          --context-length 128
+          --embedding-dimension 128
+          --layers 4
+          --heads 4
+          --ffn 512
+          --epochs 5
+          --batch-size 8
+          --lr 3e-4
+          --seed 42
+      - name: Independent evaluation after reload
+        run: python scripts/evaluate_lm_v01.py --dataset datasets/astracore-lm-v0.1 --checkpoint artifacts/astracore-lm-v0.1 --batch-size 8
+      - name: Check checkpoint integrity and experimental-only status
+        run: |
+          test -s artifacts/astracore-lm-v0.1/checkpoint.pt
+          test -s artifacts/astracore-lm-v0.1/model-config.json
+          test -s artifacts/astracore-lm-v0.1/tokenizer.json
+          test -s artifacts/astracore-lm-v0.1/training_state.json
+          test -s artifacts/astracore-lm-v0.1/test_evaluation.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          s=json.loads(Path('artifacts/astracore-lm-v0.1/training_state.json').read_text())
+          assert s['status']=='EXPERIMENTAL_CHECKPOINT_READY',s
+          assert s['test_perplexity'] == s['test_perplexity'],s
+          print(json.dumps(s,indent=2))
+          PY
+      - name: Upload reproducible artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: astracore-lm-v0.1-reproducible
+          path: |
+            artifacts/astracore-lm-v0.1/
+            datasets/astracore-lm-v0.1/metadata.json
+            datasets/astracore-lm-v0.1/records.jsonl
+          if-no-files-found: error
+          retention-days: 90
