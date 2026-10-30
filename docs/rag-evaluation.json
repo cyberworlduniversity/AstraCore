@@ -1,0 +1,5 @@
+{
+  "status": "BLOCKED",
+  "implemented": ["hybrid keyword/vector retrieval", "RLS-scoped knowledge search", "untrusted-evidence prompt isolation", "source metadata propagation"],
+  "missing_release_evidence": ["authenticated live ingestion-to-answer E2E", "groundedness measurement", "citation correctness measurement", "real test-document answer verification"]
+}
