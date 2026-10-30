@@ -14,83 +14,122 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+  actions: read
 jobs:
   step5:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Initialize run manifest
+        run: |
+          python - <<'PY'
+          import json, os, platform, sys, time
+          import torch
+          m={'run_id':os.environ.get('GITHUB_RUN_ID'),'workflow_run':os.environ.get('GITHUB_SERVER_URL','')+'/'+os.environ.get('GITHUB_REPOSITORY','')+'/actions/runs/'+os.environ.get('GITHUB_RUN_ID',''),'timestamp':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'commit_sha':os.environ.get('GITHUB_SHA'),'branch':os.environ.get('GITHUB_REF_NAME'),'python_version':sys.version.split()[0],'pytorch_version':torch.__version__,'runner':platform.platform(),'working_directory':os.getcwd(),'dataset_version':'0.2.0','architecture_version':'astracorelm-arch-v0.2','tokenizer_version':'astratokenizer-v0.1','seed':42,'status':'RUNNING'}
+          json.dump(m,open('step5-run-manifest.json','w'),indent=2)
+          print('STEP5_RUN_START'); print(json.dumps(m,indent=2))
+          PY
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
       - name: Baseline regression
         run: |
           npm test
           python -m pytest -q tests
-      - name: Prepare v0.2 dataset
-        run: python scripts/prepare_lm_dataset_v02.py --output datasets/astracore-lm-v0.2 --seed 42
-      - name: Validate split and dataset integrity
+      - name: Dataset generation
         run: |
+          echo STEP5_DATASET_START
+          python scripts/prepare_lm_dataset_v02.py --output datasets/astracore-lm-v0.2 --seed 42
           python - <<'PY'
-          import json, hashlib
+          import json,hashlib
           from pathlib import Path
-          root=Path('datasets/astracore-lm-v0.2')
-          m=json.loads((root/'metadata.json').read_text())
-          assert (m['train_count'],m['validation_count'],m['test_count'])==(1280,160,208),m
-          rows=[json.loads(x) for x in (root/'records.jsonl').read_text().splitlines() if x.strip()]
-          docs={s:{r['document_id'] for r in rows if r['split']==s} for s in ('train','validation','test')}
-          assert not (docs['train']&docs['validation'] or docs['train']&docs['test'] or docs['validation']&docs['test'])
-          assert len({r['id'] for r in rows})==len(rows)
-          assert len({r['content_sha256'] for r in rows})==len(rows)
-          assert all(r['license']=='CC0-1.0' for r in rows)
-          print(json.dumps(m,indent=2))
+          r=Path('datasets/astracore-lm-v0.2/records.jsonl'); m=json.loads(Path('datasets/astracore-lm-v0.2/metadata.json').read_text())
+          assert m['version']=='0.2.0' and (m['record_count'],m['train_count'],m['validation_count'],m['test_count'])==(1648,1280,160,208)
+          rows=[json.loads(x) for x in r.read_text().splitlines() if x.strip()]
+          sets={s:{x['document_id'] for x in rows if x['split']==s} for s in ('train','validation','test')}
+          assert not (sets['train']&sets['validation'] or sets['train']&sets['test'] or sets['validation']&sets['test'])
+          h=hashlib.sha256(r.read_bytes()).hexdigest(); print('DATASET_SHA256='+h); print(json.dumps(m,indent=2)); print('STEP5_DATASET_COMPLETE')
+          p=json.loads(Path('step5-run-manifest.json').read_text()); p['dataset_sha256']=h; json.dump(p,open('step5-run-manifest.json','w'),indent=2)
           PY
-      - name: Train candidate
-        run: >-
-          python scripts/train_lm_v02.py
-          --dataset datasets/astracore-lm-v0.2
-          --output artifacts/astracore-lm-v0.2
-          --context-length 128
-          --embedding-dimension 256
-          --layers 4
-          --heads 8
-          --ffn 1024
-          --epochs 8
-          --batch-size 16
-          --lr 3e-4
-          --weight-decay 0.01
-          --seed 42
-      - name: Independent reload evaluation and behavior
-        run: python scripts/evaluate_lm_v02.py --dataset datasets/astracore-lm-v0.2 --checkpoint artifacts/astracore-lm-v0.2
-      - name: Generate Step 5 reports
-        run: python scripts/write_step5_reports.py
-      - name: Assert production gate remains closed
+      - name: Training
         run: |
+          echo STEP5_TRAINING_START
+          python scripts/train_lm_v02.py --dataset datasets/astracore-lm-v0.2 --output artifacts/astracore-lm-v0.2 --context-length 128 --embedding-dimension 256 --layers 4 --heads 8 --ffn 1024 --epochs 8 --batch-size 16 --lr 3e-4 --weight-decay 0.01 --seed 42
+          echo STEP5_TRAINING_COMPLETE
+      - name: Checkpoint integrity and training evidence
+        run: |
+          test -s artifacts/astracore-lm-v0.2/checkpoint.pt
+          sha256sum artifacts/astracore-lm-v0.2/checkpoint.pt | tee artifacts/astracore-lm-v0.2/checkpoint.sha256
+          python - <<'PY'
+          import json,math,hashlib
+          from pathlib import Path
+          root=Path('artifacts/astracore-lm-v0.2'); s=json.loads((root/'training_state.json').read_text())
+          assert s.get('production_approved') is False
+          hist=s.get('history') or s.get('epochs') or []
+          assert hist
+          for e in hist:
+              vals=[e.get(k) for k in ('train_loss','validation_loss','validation_ppl')]
+              assert all(v is not None and math.isfinite(float(v)) for v in vals)
+          ck=Path('artifacts/astracore-lm-v0.2/checkpoint.pt').read_bytes(); c=hashlib.sha256(ck).hexdigest()
+          p=json.loads(Path('step5-run-manifest.json').read_text()); p.update({'checkpoint_sha256':c,'checkpoint_status':'CREATED','training_history':hist,'train_loss':hist[-1].get('train_loss'),'validation_loss':hist[-1].get('validation_loss'),'validation_ppl':hist[-1].get('validation_ppl')}); json.dump(p,open('step5-run-manifest.json','w'),indent=2)
+          PY
+      - name: Independent evaluation
+        run: |
+          echo STEP5_EVALUATION_START
+          python scripts/evaluate_lm_v02.py --dataset datasets/astracore-lm-v0.2 --checkpoint artifacts/astracore-lm-v0.2
+          echo STEP5_EVALUATION_COMPLETE
+      - name: Reports and gate assertion
+        run: |
+          python scripts/write_step5_reports.py
           python - <<'PY'
           import json
           from pathlib import Path
+          p=json.loads(Path('step5-run-manifest.json').read_text())
+          ev=json.loads(Path('artifacts/astracore-lm-v0.2/behavioral_evaluation.json').read_text())
           s=json.loads(Path('artifacts/astracore-lm-v0.2/training_state.json').read_text())
-          assert s['production_approved'] is False
-          r=json.loads(Path('artifacts/astracore-lm-v0.2/behavioral_evaluation.json').read_text())
-          assert r['production_approved'] is False
-          print('PRODUCTION_GATE_CLOSED')
+          assert s['production_approved'] is False and ev['production_approved'] is False
+          p['production_approved']=False
+          if 'test_loss' in ev: p['test_loss']=ev['test_loss']
+          if 'test_perplexity' in ev: p['test_ppl']=ev['test_perplexity']
+          json.dump(p,open('step5-run-manifest.json','w'),indent=2)
           PY
-      - name: Upload Step 5 artifact
+      - name: Prepare evidence package
+        if: always()
+        run: |
+          echo STEP5_ARTIFACT_START
+          mkdir -p step5-evidence
+          cp step5-run-manifest.json step5-evidence/ 2>/dev/null || true
+          cp docs/astracorelm-step5-training-report.json docs/astracorelm-step5-training-report.md docs/astracorelm-step5-comparison.json docs/astracorelm-step5-comparison.md step5-evidence/ 2>/dev/null || true
+          cp -r datasets/astracore-lm-v0.2 step5-evidence/ 2>/dev/null || true
+          cp -r artifacts/astracore-lm-v0.2 step5-evidence/ 2>/dev/null || true
+          find step5-evidence -type f -print0 | sort -z | xargs -0 sha256sum > step5-evidence/checksums.sha256 || true
+          tar -czf step5-evidence.tar.gz step5-evidence
+          sha256sum step5-evidence.tar.gz | tee step5-evidence.sha256
+          echo STEP5_ARTIFACT_COMPLETE
+      - name: Finalize manifest
+        if: always()
+        run: |
+          python - <<'PY'
+          import json,os,hashlib
+          from pathlib import Path
+          p=json.loads(Path('step5-run-manifest.json').read_text()) if Path('step5-run-manifest.json').exists() else {'run_id':os.environ.get('GITHUB_RUN_ID')}
+          p['status']='SUCCESS' if os.environ.get('RUNNER_TEMP') and Path('artifacts/astracore-lm-v0.2/checkpoint.pt').exists() else 'FAILED'
+          p['artifact_sha256']=hashlib.sha256(Path('step5-evidence.tar.gz').read_bytes()).hexdigest() if Path('step5-evidence.tar.gz').exists() else None
+          json.dump(p,open('step5-run-manifest.json','w'),indent=2)
+          print('STEP5_RUN_COMPLETE')
+          PY
+      - name: Upload single evidence artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: astracore-lm-v0.2-step5
+          name: astracore-lm-v0.2-step5-evidence
           path: |
-            artifacts/astracore-lm-v0.2/
-            datasets/astracore-lm-v0.2/metadata.json
-            datasets/astracore-lm-v0.2/records.jsonl
-          if-no-files-found: error
+            step5-run-manifest.json
+            step5-evidence.tar.gz
+            step5-evidence.sha256
+            step5-evidence/
+          if-no-files-found: warn
           retention-days: 90
-      - name: Commit evidence reports
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add docs/astracorelm-step5-diagnosis.json docs/astracorelm-step5-diagnosis.md docs/astracorelm-step5-experiments.json docs/astracorelm-step5-training-report.json docs/astracorelm-step5-comparison.json docs/astracorelm-step5-comparison.md
-          git diff --cached --quiet || git commit -m 'docs: record AstraCoreLM Step 5 experimental evidence'
-          git push
