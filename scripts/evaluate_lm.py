@@ -24,7 +24,7 @@ def main():
             row=ids[i:i+width]
             if len(row)<width: continue
             x=torch.tensor(row[:-1]).unsqueeze(0); y=torch.tensor(row[1:]).unsqueeze(0); _,loss=model(x,y); losses.append(float(loss))
-    loss=sum(losses)/max(1,len(losses)); result={'checkpoint':str(root),'validation_loss':loss,'perplexity':math.exp(min(20,loss)),'stored_training_state':state}
+    loss=sum(losses)/max(1,len(losses)); result={'checkpoint':str(root),'validation_loss':loss,'perplexity':math.exp(loss) if loss < 700 else float('inf'),'stored_training_state':state}
     print(json.dumps(result,indent=2))
 
 if __name__=='__main__': main()
