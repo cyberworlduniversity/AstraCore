@@ -1,0 +1,51 @@
+{
+  "generated_at": "2026-10-30T13:37:36.024Z",
+  "project": "astracore",
+  "tests": {"node": "PASS", "python": "PASS"},
+  "release_status": "BLOCKED",
+  "steps": {
+    "16": "STRUCTURE_PRESENT",
+    "17": "STRUCTURE_PRESENT",
+    "18": "STRUCTURE_PRESENT",
+    "19": "STRUCTURE_PRESENT",
+    "20": "STRUCTURE_PRESENT",
+    "21": "STRUCTURE_PRESENT",
+    "22": "STRUCTURE_PRESENT",
+    "23": "STRUCTURE_PRESENT",
+    "24": "STRUCTURE_PRESENT",
+    "25": "STRUCTURE_PRESENT",
+    "26": "STRUCTURE_PRESENT",
+    "27": "STRUCTURE_PRESENT",
+    "28": "STRUCTURE_PRESENT",
+    "29": "STRUCTURE_PRESENT",
+    "30": "STRUCTURE_PRESENT",
+    "31": "STRUCTURE_PRESENT",
+    "32": "STRUCTURE_PRESENT",
+    "33": "STRUCTURE_PRESENT",
+    "34": "STRUCTURE_PRESENT",
+    "35": "BLOCKED"
+  },
+  "lm_training_evidence": {
+    "status": "BLOCKED_FOR_PRODUCTION",
+    "reason": "Verified local training completed on the current single-document corpus, but there are no independent validation documents and measured perplexity remains extremely high. This is not a production-quality checkpoint.",
+    "validation_loss": 39.03763198852539,
+    "perplexity": 89914174044382900,
+    "train_documents": 1,
+    "validation_documents": 0
+  },
+  "embed_training_evidence": {
+    "status": "EVALUATED_NOT_PRODUCTION",
+    "pairs": 12,
+    "mean_positive_cosine": 0.46208372712135315,
+    "top1_accuracy": 0.75,
+    "embedding_dim": 384,
+    "reason": "Verified local checkpoint/evaluation evidence exists, but the dataset is bootstrap-scale and production promotion criteria are not satisfied."
+  },
+  "blockers": [
+    "AstraCoreLM production promotion blocked by inadequate corpus/validation evidence and measured quality.",
+    "AstraCoreEmbed production promotion blocked by bootstrap-scale dataset/evaluation evidence.",
+    "Several external capabilities still require real implementation and live verification, including web research, code execution, database query, and multimodal analysis adapters.",
+    "Supabase production registry synchronization and deployment/rollback evidence must be verified before final PASS."
+  ],
+  "policy": "Code presence is not treated as production evidence. A final production claim requires executed tests, measured metrics, security evidence, deployment evidence, and rollback evidence."
+}
