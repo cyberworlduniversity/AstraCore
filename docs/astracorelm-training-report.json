@@ -1,0 +1,106 @@
+{
+  "status": "EXPERIMENTAL_CHECKPOINT_READY",
+  "model": {"name":"AstraCoreLM","version":"astracorelm-v0.1","architecture_version":"astracorelm-arch-v0.1","git_commit":"b95920510118e924ea8c04677a1f9ebab6821029"},
+  "dataset": {
+    "dataset_version":"0.1.0",
+    "source":"original-astracore-engineering-curriculum",
+    "license":"CC0-1.0",
+    "records":1236,
+    "documents":103,
+    "train_count":960,
+    "validation_count":120,
+    "test_count":156,
+    "seed":42,
+    "split_method":"concept-level deterministic split; all templates from one source concept remain in one split",
+    "dataset_sha256":"e12e2d14459fba9a757aabda144b560509027d6424d954ff985d9753bdb3f9e3",
+    "train_sha256":"d76bad5da2da9318552a88cd4eea4ad9444a19231fc439663cc565756120b2d8",
+    "validation_sha256":"00560c3c8da3fba940a018617a838bcdcd0200a48f11d475429af40ee7d61cce",
+    "test_sha256":"47567aff73b622e8ad8b66c53ac0ef40a9e82cfd02033f937d1763501af2e157",
+    "leakage":"PASS: no source-document intersection, duplicate IDs, or duplicate content hashes across the generated records"
+  },
+  "architecture": {
+    "context_length":128,
+    "vocab_size":627,
+    "embedding_dimension":128,
+    "layers":4,
+    "attention_heads":4,
+    "feed_forward_dimension":512,
+    "dropout":0.1,
+    "normalization":"LayerNorm-pre-norm",
+    "positional_encoding":"learned-absolute",
+    "weight_tying":true,
+    "parameter_count":889984,
+    "config_sha256":"a2c61b0a42cacba801a0100853028d680913ef5b762cdbb7026ef9ac3c872752",
+    "compatibility":"PASS for the trained checkpoint: the saved checkpoint config is reloaded and used to reconstruct the model"
+  },
+  "tokenizer": {
+    "version":"astratokenizer-v0.1",
+    "type":"AstraTokenizer",
+    "vocabulary_size":627,
+    "sha256":"0beaf889d4d7bf49d90a970f50dd56b14eeb54453851501722b0fded2aedd8a2",
+    "determinism":"PASS within the training/evaluation run",
+    "checkpoint_binding":"PASS: checkpoint metadata and model-config.json record the tokenizer SHA-256"
+  },
+  "training": {
+    "seed":42,
+    "python":"3.11.17",
+    "torch":"2.15.0+cu132",
+    "device":"cpu",
+    "epochs":5,
+    "batch_size":8,
+    "learning_rate":0.0003,
+    "best_epoch":5,
+    "gradient_clipping":1.0,
+    "history":[
+      {"epoch":1,"train_loss":43.00800975163778,"validation_loss":27.631567001342773,"validation_perplexity":1000546034436.7831},
+      {"epoch":2,"train_loss":18.54245674610138,"validation_loss":19.855148951212566,"validation_perplexity":419741226.1794456},
+      {"epoch":3,"train_loss":13.700265208880106,"validation_loss":15.987518628438314,"validation_perplexity":8775888.962372204},
+      {"epoch":4,"train_loss":11.408796072006226,"validation_loss":14.025253613789877,"validation_perplexity":1233361.1142865713},
+      {"epoch":5,"train_loss":10.140133937199911,"validation_loss":12.591744422912598,"validation_perplexity":294120.3813569566}
+    ]
+  },
+  "evaluation": {
+    "best_validation_loss":12.591744422912598,
+    "best_validation_perplexity":294120.3813569566,
+    "test_loss":12.97492504119873,
+    "test_perplexity":431457.82366694347,
+    "test_tokens":3840,
+    "validation_tokens":2944,
+    "ppl_formula":"exp(loss) for token-level cross entropy",
+    "independent_reload_evaluation":"PASS"
+  },
+  "checkpoint": {
+    "path":"artifacts/astracore-lm-v0.1/checkpoint.pt",
+    "sha256":"0e1461c110eae7b055b041cb535f2182dec71834cbaf14f68e0e79be460eee3f",
+    "size_bytes":null,
+    "artifact":"astracore-lm-v0.1-reproducible",
+    "artifact_id":"12991290210",
+    "artifact_zip_size_bytes":9940980,
+    "artifact_zip_sha256":"388ecb83472ce2b3eb7b2f27c0bad4ed78f30ea012693512249b7acef6f92c6c",
+    "retention_days":90,
+    "reload":"PASS"
+  },
+  "runtime": {
+    "generation_single_step_ms":1.4400589999894464,
+    "generation_tokens_per_second":"NOT_MEASURED",
+    "peak_memory_bytes":"NOT_MEASURED",
+    "load_latency_ms":"NOT_MEASURED",
+    "reload_verified":true,
+    "device":"cpu"
+  },
+  "security": {
+    "production_gate_unchanged":true,
+    "requireProductionReady":true,
+    "bootstrap_fallback":"not introduced",
+    "external_model":"not used",
+    "production_approval":"not granted",
+    "secret_isolation":"not directly exercised in this training workflow"
+  },
+  "tests": {"node":56,"python":14,"dataset_split":"PASS","checkpoint_reload":"PASS","independent_evaluation":"PASS","production_approval":"NOT GRANTED"},
+  "limitations":[
+    "The corpus is the existing CC0-1.0 AstraCore engineering curriculum and is small; these metrics do not establish broad real-world language competence.",
+    "No quality threshold was invented because no repository production-quality perplexity threshold was defined.",
+    "Generation quality, adversarial prompt suite, resource stress matrix, and full runtime benchmark were not part of the executed training workflow and remain for later certification.",
+    "The model is an experimental checkpoint and must not be accepted by production /api/chat until the existing production gate is independently satisfied."
+  ]
+}
