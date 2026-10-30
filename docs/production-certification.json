@@ -1,16 +1,19 @@
 {
   "version": "AstraCore-1.0",
   "status": "PRODUCTION_BLOCKED",
-  "certified_runtime_head": "d6953e340890061db1155397a7ca3aa50f9fdbfc",
-  "latest_repo_head_at_report_update": "3312085162c8e6959c59b6b992f972873993290c",
-  "gates": {"lm":"BLOCKED","embeddings":"PASS","rag":"BLOCKED","memory":"BLOCKED","tools":"BLOCKED","multimodal":"BLOCKED","web":"BLOCKED","coding":"BLOCKED","agents":"BLOCKED","safety":"BLOCKED","evaluation":"BLOCKED","api":"BLOCKED","database":"PASS","auth":"BLOCKED","observability":"BLOCKED","reliability":"BLOCKED","ui":"BLOCKED","security":"BLOCKED","deployment":"BLOCKED","rollback":"BLOCKED"},
+  "certified_runtime_head": "f39dd0b7a83e19b9a2d9c69ba9af0ba0ac3332c4",
+  "gates": {"lm":"EXPERIMENTAL","embeddings":"PASS","rag":"NOT_CERTIFIED","memory":"NOT_CERTIFIED","tools":"BLOCKED","multimodal":"BLOCKED","web":"BLOCKED","coding":"BLOCKED","agents":"BLOCKED","safety":"NOT_CERTIFIED","evaluation":"BLOCKED","api":"NOT_CERTIFIED","database":"PASS","auth":"BLOCKED","observability":"NOT_CERTIFIED","reliability":"NOT_CERTIFIED","ui":"BLOCKED","security":"NOT_CERTIFIED","deployment":"BLOCKED","rollback":"BLOCKED"},
   "evidence": {
     "dataset":{"version":"1.0.0","records":1236,"train":1008,"validation":108,"test":120,"license":"CC0-1.0","sha256":"8172fbbf83c808c3d0861cc1226b6cde00536c504f5d8f51c523b232ed84fe65"},
-    "lm":{"validation_loss":10.0984,"validation_perplexity":24304.37,"test_loss":10.1959,"test_perplexity":26792.99,"status":"experimental/not production promoted"},
+    "lm":{"validation_loss":10.0984,"validation_perplexity":24304.37,"test_loss":10.1959,"test_perplexity":26792.99,"status":"experimental"},
     "embedding":{"benchmark_pairs":600,"held_out_pairs":120,"mean_positive_cosine":0.9062895178794861,"recall_at_1":0.8833333253860474,"recall_at_5":1.0,"recall_at_10":1.0,"mrr":0.9416666626930237,"top1_accuracy":0.8833333253860474,"embedding_dim":384,"checkpoint_sha256":"81a002c3706c63226515442e3c58af57febd0bd3c3e765230c616a8bffa0b45b"},
-    "database":{"supabase_project":"pmqdghauotnxxrupglvz","postgres_major":17,"rls_enabled_on_astracore_tables":true,"security_migrations_verified":true,"remaining_performance_warnings":7},
-    "deployment":{"latest_attempt":"blocked","reason":"Vercel HTTP 402 api-deployments-free-per-day; retryAfter 86400"},
+    "database":{"supabase_project":"pmqdghauotnxxrupglvz","postgres_major":17,"all_public_astracore_tables_rls_enabled":true,"memory_consent_migration_applied":true,"security_migrations_verified":true},
+    "memory":{"consent_required":true,"consent_revoke_endpoint":"/api/memory/consent/revoke","forget_is_owner_scoped":true,"expired_and_revoked_records_filtered":true,"live_two_user_execution":"NOT_EXECUTED"},
+    "production_gate":{"requires_production_ready":true,"requires_checkpoint_checksum":true,"requires_tokenizer_checksum":true,"requires_model_version":true,"requires_evaluation_id":true,"revocation_and_expiry_checked":true},
+    "bootstrap_fallback":{"server_removed":true,"vercel_removed":true,"verified_commit":"d545a24fcfb9093af8d831fde1867132bc6786ec"},
+    "deployment":{"latest_attempt":"blocked","reason":"Vercel integrations currently report build-rate-limit / upgradeToPro target"},
     "auth":{"leaked_password_protection":"BLOCKED_EXTERNAL_CONFIGURATION_REQUIRED"}
   },
-  "remaining_release_blockers":["Own LM quality and production checkpoint promotion","Authenticated RAG end-to-end evidence","Memory cross-user and forget isolation evidence","Real tool execution and sandbox security evidence","Multimodal real-file matrix","Web injection evidence","Coding patch verification","Bounded agent execution evidence","Full security adversarial suite","Full API regression matrix","Observability/reliability evidence","Current production deployment verification","Rollback execution and verification","Supabase leaked-password protection external configuration"]
+  "remaining_release_blockers":["Own LM quality and production checkpoint promotion","Authenticated RAG end-to-end evidence","Memory cross-user and forget isolation runtime evidence","Real tool execution and sandbox security evidence","PNG/JPEG OCR and full multimodal adversarial matrix","Web SSRF and injection evidence","Coding sandbox and patch verification","Bounded agent execution evidence","Full adversarial security suite","Full API regression matrix","Observability/reliability evidence","Current production deployment verification","Rollback execution and verification","Supabase leaked-password protection external configuration"],
+  "policy":"No gate is promoted from source-code presence alone. Runtime evidence is required for PASS. AstraCore platform status is separate from AstraCoreLM status."
 }
