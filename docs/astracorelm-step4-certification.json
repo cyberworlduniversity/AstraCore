@@ -1,0 +1,87 @@
+{
+  "step": 4,
+  "candidate": {
+    "model_version": "astracorelm-v0.1",
+    "architecture_version": "astracorelm-arch-v0.1",
+    "checkpoint_sha256": "0e1461c110eae7b055b041cb535f2182dec71834cbaf14f68e0e79be460eee3f",
+    "tokenizer_sha256": "0beaf889d4d7bf49d90a970f50dd56b14eeb54453851501722b0fded2aedd8a2",
+    "dataset_sha256": "e12e2d14459fba9a757aabda144b560509027d6424d954ff985d9753bdb3f9e3"
+  },
+  "integrity": {
+    "checkpoint_sha256": "PASS",
+    "tokenizer_sha256": "PASS",
+    "checkpoint_tokenizer_binding": "PASS",
+    "architecture": "PASS",
+    "strict_state_dict_reload": "PASS",
+    "unexpected_initialization": "PASS"
+  },
+  "quality": {
+    "validation_loss": 12.591744422912598,
+    "validation_perplexity": 294120.3813569566,
+    "test_loss": 12.97492504119873,
+    "test_perplexity": 431457.82366694347,
+    "instruction_following": "FAIL",
+    "context_grounding": "FAIL",
+    "unknown_information": "FAIL",
+    "structured_output": "FAIL",
+    "basic_reasoning": "FAIL",
+    "english_generation": "FAIL",
+    "tamil_generation": "FAIL",
+    "prompt_injection_behavior": "FAIL",
+    "repetition_degeneracy": "FAIL",
+    "long_context_behavior": "FAIL",
+    "decision": "RETRAINING_REQUIRED"
+  },
+  "runtime": {
+    "tokenizer_load_ms": {"min": 0.361995, "median": 0.4032625, "p95": 0.608747, "max": 0.608747},
+    "model_load_ms": {"min": 12.676441, "median": 16.6940845, "p95": 59.747597, "max": 59.747597},
+    "total_initialization_ms": {"min": 13.088752, "median": 17.103391, "p95": 60.356344, "max": 60.356344},
+    "first_token_ms": {"min": 0.858594, "median": 1.064774, "p95": 2.13014, "max": 2.13014},
+    "generation_20_tokens_ms": {"min": 21.738545, "median": 27.642362, "p95": 64.210654, "max": 64.210654},
+    "tokens_per_second": {"min": 311.4747905, "median": 725.32156175, "p95": 920.0247337, "max": 920.0247337},
+    "peak_ram": "NOT_MEASURED",
+    "parameter_memory_at_float32": 3559928,
+    "concurrency": {"1": "PASS", "2": "PASS", "4": "PASS", "state_contamination_observed": false},
+    "real_api_timeout_test": "NOT_MEASURED",
+    "real_api_malformed_input_matrix": "NOT_RUN"
+  },
+  "context": {
+    "declared_context_length": 128,
+    "over_limit_forward": "FAIL_CONTROLLED_INDEX_ERROR",
+    "rag_model_context_limitation": "BLOCKER",
+    "note": "Tokenizer adds BOS/EOS; a prompt of 128 whitespace-separated test tokens encoded to 130 tokens and exceeded the positional embedding range."
+  },
+  "security": {
+    "checkpoint_corruption_detection": "PASS",
+    "tokenizer_corruption_detection": "PASS",
+    "architecture_mismatch_detection": "PASS",
+    "fallback_protection": "PASS",
+    "prompt_injection_application_boundary": "PASS",
+    "secret_isolation": "NOT_FULLY_RUNTIME_MEASURED",
+    "expiration_revocation_logic": "PASS_BY_EXISTING_PRODUCTION_GATE_TESTS",
+    "authorization": "AUTH_REQUIRED_BY_SERVER",
+    "api_chat": "EXPECTED_BLOCK; NOT_RUN_FOR_PROMOTION"
+  },
+  "production_metadata": {
+    "registry_status": "experimental",
+    "approval": "NOT_GRANTED",
+    "evaluation_id": null,
+    "expires_at": null,
+    "revoked_at": null
+  },
+  "regression": {
+    "node": {"passed": 56, "failed": 0},
+    "python": {"passed": 14, "failed": 0},
+    "source": "Step 3 CI run 41083070466 at commit b95920510118e924ea8c04677a1f9ebab6821029",
+    "step4_full_rerun": "NOT_RERUN_IN_REPOSITORY"
+  },
+  "critical_blockers": [
+    "The current production server loader expects the existing JSON checkpoint format and the JS NeuralLanguageModel/CharacterTokenizer, while the exact Step 3 candidate is a PyTorch .pt checkpoint. The candidate is therefore not deployable through the current /api/chat runtime without an explicit production runtime implementation.",
+    "Behavioral quality is inadequate: deterministic generation repeatedly degenerates into '. a' / 'what' loops, exact three-bullet and JSON structure requests fail, grounding questions do not reliably return supplied facts, and English/Tamil prompts often terminate immediately.",
+    "Test perplexity is 431457.82366694347, which does not demonstrate production-suitable language quality for AstraCore's intended assistant role.",
+    "The 128-token context contract is not safely integrated with application/RAG behavior; BOS/EOS consume context and over-limit direct forward fails with IndexError.",
+    "The real /api/chat production path was not exercised because prerequisite integrity/quality/runtime gates failed; the production gate remains closed.",
+    "Peak RAM and real API timeout/malformed-input stress metrics remain unmeasured rather than inferred."
+  ],
+  "final_decision": "RETRAINING_REQUIRED"
+}
