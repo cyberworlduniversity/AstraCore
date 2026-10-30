@@ -34,6 +34,20 @@ def collate(batch):
 
 def sha(path): return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
+def parameter_fingerprint(model):
+    h = hashlib.sha256()
+    with torch.no_grad():
+        for name, param in sorted(model.named_parameters(), key=lambda item: item[0]):
+            tensor = param.detach().cpu().contiguous()
+            h.update(name.encode('utf-8'))
+            h.update(b'\\0')
+            h.update(str(tensor.dtype).encode('ascii'))
+            h.update(b'\\0')
+            h.update(json.dumps(list(tensor.shape), separators=(',', ':')).encode('ascii'))
+            h.update(b'\\0')
+            h.update(tensor.numpy().tobytes(order='C'))
+    return h.hexdigest()
+
 def score(model, ds, batch):
     model.eval(); total_nll = 0.0; total_tokens = 0
     with torch.no_grad():
@@ -66,10 +80,11 @@ def main():
     cfg_path = out/'model-config.json'; cfg_path.write_text(json.dumps(cfg.to_dict(), indent=2)+'\n', encoding='utf-8'); cfg_sha = sha(cfg_path)
     datasets = {s: SequenceDataset(splits[s], tok, a.context_length) for s in splits}
     model = AstraCoreLMV02(cfg)
+    initial_parameter_sha256 = parameter_fingerprint(model)
     optimizer = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=a.weight_decay)
     train_loader = DataLoader(datasets['train'], batch_size=a.batch_size, shuffle=True, generator=torch.Generator().manual_seed(a.seed), collate_fn=collate)
     total_steps = max(1, len(train_loader) * a.epochs); warmup = max(1, min(100, total_steps // 10))
-    best = float('inf'); best_epoch = 0; history = []; step = 0; start = time.perf_counter()
+    best = float('inf'); best_epoch = 0; history = []; step = 0; epochs_completed = 0; start = time.perf_counter()
     for epoch in range(1, a.epochs + 1):
         model.train(); train_nll = 0.0; train_tokens = 0
         for x, y in train_loader:
@@ -79,16 +94,24 @@ def main():
             for group in optimizer.param_groups: group['lr'] = a.lr * lr_scale
             logits, _ = model(x, y)
             loss = torch.nn.functional.cross_entropy(logits.reshape(-1, logits.size(-1)), y.reshape(-1), ignore_index=PAD_ID)
+            if not torch.isfinite(loss):
+                raise FloatingPointError(f'NONFINITE_TRAIN_LOSS:epoch={epoch}:step={step}')
             loss.backward(); torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0); optimizer.step()
             train_nll += float(loss) * int(y.ne(PAD_ID).sum()); train_tokens += int(y.ne(PAD_ID).sum())
         train_loss = train_nll / max(1, train_tokens)
         val_loss, val_ppl, val_tokens = score(model, datasets['validation'], a.batch_size)
-        row = {'epoch': epoch, 'train_loss': train_loss, 'validation_loss': val_loss, 'validation_perplexity': val_ppl, 'validation_tokens': val_tokens}
-        history.append(row); print(json.dumps(row))
+        if not (math.isfinite(train_loss) and math.isfinite(val_loss) and math.isfinite(val_ppl)):
+            raise FloatingPointError(f'NONFINITE_EPOCH_METRICS:epoch={epoch}')
+        row = {'epoch': epoch, 'train_loss': train_loss, 'validation_loss': val_loss, 'validation_ppl': val_ppl, 'validation_perplexity': val_ppl, 'validation_tokens': val_tokens}
+        history.append(row); epochs_completed = epoch; print(json.dumps(row))
         if val_loss < best:
             best, best_epoch = val_loss, epoch
             torch.save({'model': model.state_dict(), 'config': cfg.to_dict(), 'model_version': 'astracorelm-v0.2', 'dataset_version': '0.2.0', 'dataset_sha256': sha(root/'records.jsonl'), 'tokenizer_sha256': tok_sha, 'config_sha256': cfg_sha, 'epoch': epoch, 'seed': a.seed, 'optimizer': optimizer.state_dict()}, out/'checkpoint.pt')
+    if step <= 0 or epochs_completed <= 0:
+        raise RuntimeError('TRAINING_DID_NOT_EXECUTE')
+    trained_parameter_sha256 = parameter_fingerprint(model)
     checkpoint_sha = sha(out/'checkpoint.pt')
+    checkpoint_size_bytes = (out/'checkpoint.pt').stat().st_size
     payload = torch.load(out/'checkpoint.pt', map_location='cpu', weights_only=False)
     reloaded = AstraCoreLMV02(ModelConfigV02.from_dict(payload['config'])); reloaded.load_state_dict(payload['model'], strict=True); reloaded.eval()
     test_loss, test_ppl, test_tokens = score(reloaded, datasets['test'], a.batch_size)
@@ -96,16 +119,19 @@ def main():
     training = {
         'status': 'EXPERIMENTAL_CANDIDATE_READY', 'model_version': 'astracorelm-v0.2', 'architecture_version': cfg.architecture_version,
         'python_version': platform.python_version(), 'torch_version': torch.__version__, 'seed': a.seed, 'epochs': a.epochs,
+        'epochs_completed': epochs_completed, 'optimizer_steps': step, 'batches_per_epoch': len(train_loader), 'total_training_batches': len(train_loader) * a.epochs,
         'batch_size': a.batch_size, 'learning_rate': a.lr, 'weight_decay': a.weight_decay, 'warmup_steps': warmup,
         'context_length': a.context_length, 'max_encoded_sequence_length': cfg.max_encoded_sequence_length, 'vocab_size': tok.vocab_size,
-        'parameter_count': sum(p.numel() for p in reloaded.parameters()), 'best_epoch': best_epoch, 'history': history,
-        'best_validation_loss': best, 'best_validation_perplexity': math.exp(best), 'test_loss': test_loss, 'test_perplexity': test_ppl,
+        'parameter_count': sum(p.numel() for p in reloaded.parameters()), 'initial_parameter_sha256': initial_parameter_sha256,
+        'trained_parameter_sha256': trained_parameter_sha256, 'weights_changed': initial_parameter_sha256 != trained_parameter_sha256,
+        'best_epoch': best_epoch, 'history': history, 'best_validation_loss': best, 'best_validation_ppl': math.exp(best), 'best_validation_perplexity': math.exp(best),
+        'test_loss': test_loss, 'test_perplexity': test_ppl, 'test_ppl': test_ppl,
         'validation_tokens': history[best_epoch-1]['validation_tokens'], 'test_tokens': test_tokens, 'dataset_sha256': sha(root/'records.jsonl'),
-        'tokenizer_sha256': tok_sha, 'config_sha256': cfg_sha, 'checkpoint_sha256': checkpoint_sha, 'checkpoint_path': str(out/'checkpoint.pt'),
-        'training_elapsed_ms': elapsed, 'reload_verified': True, 'production_approved': False,
+        'tokenizer_sha256': tok_sha, 'config_sha256': cfg_sha, 'checkpoint_sha256': checkpoint_sha, 'checkpoint_size_bytes': checkpoint_size_bytes,
+        'checkpoint_path': str(out/'checkpoint.pt'), 'training_elapsed_ms': elapsed, 'reload_verified': True, 'production_approved': False,
     }
     (out/'training_state.json').write_text(json.dumps(training, indent=2)+'\n', encoding='utf-8')
-    (out/'test_evaluation.json').write_text(json.dumps({'validation_loss':best,'validation_perplexity':math.exp(best),'test_loss':test_loss,'test_perplexity':test_ppl,'test_tokens':test_tokens,'checkpoint_sha256':checkpoint_sha}, indent=2)+'\n', encoding='utf-8')
+    (out/'test_evaluation.json').write_text(json.dumps({'validation_loss':best,'validation_ppl':math.exp(best),'test_loss':test_loss,'test_perplexity':test_ppl,'test_ppl':test_ppl,'test_tokens':test_tokens,'checkpoint_sha256':checkpoint_sha}, indent=2)+'\n', encoding='utf-8')
     print(json.dumps(training, indent=2))
 
 if __name__ == '__main__': main()
