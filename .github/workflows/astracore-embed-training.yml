@@ -32,7 +32,7 @@ jobs:
       - name: Install Python dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
       - name: Validate semantic dataset
-        run: python scripts/validate_embedding_dataset.py --data datasets/astracore-embed-v0.1-bootstrap.jsonl
+        run: python scripts/validate_embedding_dataset.py datasets/astracore-embed-v0.1-bootstrap.jsonl
       - name: Train AstraCoreEmbed v0.1
         run: >-
           python scripts/train_embeddings.py
