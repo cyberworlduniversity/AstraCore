@@ -1,0 +1,136 @@
+{
+  "model": {
+    "name": "AstraCoreLM",
+    "version": "astracorelm-v0.1",
+    "status": "EXPERIMENTAL",
+    "decision": "PRODUCTION_BLOCKED"
+  },
+  "checkpoint": {
+    "path": null,
+    "sha256": null,
+    "size_bytes": null,
+    "inventory_status": "BLOCKED",
+    "reason": "The current repository does not contain a committed AstraCoreLM production checkpoint. The current Supabase model registry row has checkpoint_path=null and status=untrained. No checkpoint hash is being invented."
+  },
+  "tokenizer": {
+    "type": "repository AstraTokenizer",
+    "vocabulary_size": null,
+    "sha256": null,
+    "integrity_status": "NOT_CERTIFIED",
+    "reason": "A tokenizer file belonging to a certifiable production checkpoint is not present in the repository. The source tokenizer implementation is deterministic and defines <pad>, <unk>, <bos>, and <eos>, but source-code identity is not a substitute for checkpoint-bound tokenizer integrity."
+  },
+  "architecture": {
+    "source": "model/model.py",
+    "architecture": "decoder-only causal Transformer",
+    "compatibility": "BLOCKED",
+    "runtime_defaults": {
+      "context_length": 256,
+      "embedding_dimension": 128,
+      "number_of_layers": 4,
+      "attention_heads": 4,
+      "feed_forward_dimension": 512
+    },
+    "registry_row": {
+      "model_id": "astracorelm-v0.1",
+      "context_length": 256,
+      "embedding_dimension": 256,
+      "layers": 6,
+      "attention_heads": 8,
+      "feed_forward_dimension": 1024,
+      "status": "untrained"
+    },
+    "reason": "The current registry architecture metadata does not match the current repository ModelConfig defaults. Without a checkpoint-bound config and state_dict, architecture compatibility cannot be certified."
+  },
+  "dataset": {
+    "source": "current repository LM training corpus",
+    "current_training_evidence": {
+      "status": "BLOCKED_FOR_PRODUCTION",
+      "train_documents": 1,
+      "validation_documents": 0,
+      "test_documents": null,
+      "validation_loss": 39.03763198852539,
+      "validation_perplexity": 89914174044382900,
+      "independent_split_verification": "FAILED"
+    },
+    "provenance_status": "BLOCKED",
+    "leakage_status": "NOT_CERTIFIED",
+    "reason": "The executed current training evidence uses a single-document corpus with zero independent validation documents. This does not establish train/validation/test separation or leakage-free production evaluation."
+  },
+  "evaluation": {
+    "validation_loss": 39.03763198852539,
+    "validation_perplexity": 89914174044382900,
+    "test_loss": null,
+    "test_perplexity": null,
+    "status": "BLOCKED",
+    "threshold": "NOT_DEFINED",
+    "notes": [
+      "Current measured validation evidence is retained as evidence, not as a production pass.",
+      "No independent test-set metric is available in the current certification evidence.",
+      "The repository evaluation script evaluates a supplied text file and is not by itself evidence of a separated validation/test certification pipeline."
+    ]
+  },
+  "runtime": {
+    "load_time_ms": null,
+    "generation_latency_ms": null,
+    "tokens_per_second": null,
+    "peak_memory_bytes": null,
+    "status": "NOT_CERTIFIED",
+    "reason": "A certifiable production checkpoint is unavailable and the production model gate correctly prevents promotion."
+  },
+  "security": {
+    "unsafe_fallback": false,
+    "checkpoint_integrity_verified": false,
+    "tokenizer_integrity_verified": false,
+    "secret_isolation": "SOURCE_REVIEW_REQUIRED_FOR_MODEL_PROCESS",
+    "failure_handling": "BLOCKED_SAFELY",
+    "production_gate_requires_production_ready": true,
+    "production_gate_requires_checkpoint_sha256": true,
+    "production_gate_requires_tokenizer_sha256": true,
+    "production_gate_requires_model_version": true,
+    "production_gate_requires_evaluation_id": true,
+    "production_gate_checks_expiry_and_revocation": true
+  },
+  "api": {
+    "chat_execution": "BLOCKED",
+    "expected_behavior": "MODEL_NOT_PRODUCTION_READY",
+    "reason": "No production-approved checkpoint exists. /api/chat must not accept an experimental or unregistered checkpoint."
+  },
+  "tests": {
+    "node": "PASS",
+    "python": "PASS",
+    "lm_certification": "BLOCKED",
+    "checkpoint_integrity": "NOT_EXECUTED",
+    "tokenizer_integrity": "NOT_EXECUTED",
+    "architecture_fixture_tests": "NOT_EXECUTED",
+    "production_metadata_tests": "BLOCKED",
+    "invalid_checkpoint_tests": "NOT_EXECUTED",
+    "invalid_tokenizer_tests": "NOT_EXECUTED",
+    "approval_expiry_tests": "IMPLEMENTATION_PRESENT",
+    "approval_revocation_tests": "IMPLEMENTATION_PRESENT",
+    "fallback_regression": "PASS_BY_REVIEWED_GATE/HARDENING",
+    "deterministic_inference": "NOT_EXECUTED",
+    "resource_limits": "NOT_EXECUTED"
+  },
+  "approval": {
+    "status": "NOT_APPROVED",
+    "model_version": "astracorelm-v0.1",
+    "checkpoint_path": null,
+    "checkpoint_sha256": null,
+    "tokenizer_sha256": null,
+    "evaluation_id": null,
+    "approved_at": null,
+    "expires_at": null,
+    "revoked_at": null
+  },
+  "blockers": [
+    "No committed, checkpoint-bound production artifact is available for independent integrity verification.",
+    "Supabase model registry currently records AstraCoreLM v0.1 as untrained with no checkpoint path or evaluation metrics.",
+    "Current training evidence contains one training document and zero independent validation documents.",
+    "Current measured validation perplexity is approximately 8.9914e16, which is retained as evidence and not treated as a production-quality result.",
+    "No independent test loss/perplexity is available for the current certification run.",
+    "Current registry architecture metadata conflicts with repository ModelConfig defaults; checkpoint-bound compatibility cannot be established.",
+    "Production approval metadata is incomplete/nonexistent for the current checkpoint identity."
+  ],
+  "final_status": "PRODUCTION_BLOCKED",
+  "certification_policy": "No fabricated metrics, hashes, approval, fallback, or production promotion. Experimental checkpoints remain rejected by requireProductionReady:true. Retraining is not started automatically."
+}
