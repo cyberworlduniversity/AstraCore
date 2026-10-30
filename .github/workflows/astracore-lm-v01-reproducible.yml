@@ -39,7 +39,7 @@ jobs:
           from pathlib import Path
           root=Path('datasets/astracore-lm-v0.1')
           m=json.loads((root/'metadata.json').read_text())
-          assert (m['train_count'],m['validation_count'],m['test_count'])==(984,120,132),m
+          assert (m['train_count'],m['validation_count'],m['test_count'])==(960,120,156),m
           rows=[json.loads(x) for x in (root/'records.jsonl').read_text().splitlines() if x.strip()]
           sets={s:{r['document_id'] for r in rows if r['split']==s} for s in ('train','validation','test')}
           assert not (sets['train']&sets['validation'] or sets['train']&sets['test'] or sets['validation']&sets['test'])
