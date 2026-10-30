@@ -1,0 +1,42 @@
+name: AstraCore one-time production hardening
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    if: "!contains(github.event.head_commit.message, '[production-hardening-complete]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove unsafe Vercel bootstrap fallback
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('api/[...path].js')
+          s = p.read_text()
+          start = s.index('const BOOTSTRAP_CORPUS=')
+          end = s.index('function json(', start)
+          s = s[:start] + s[end:]
+          old = "try{engines[id]=await loadCheckpoint(c.checkpoint,{Model:NeuralLanguageModel,Tokenizer:CharacterTokenizer})}catch{engines[id]=bootstrapEngine()}"
+          new = "try{engines[id]=await loadCheckpoint(c.checkpoint,{Model:NeuralLanguageModel,Tokenizer:CharacterTokenizer,requireProductionReady:true})}catch{delete engines[id]}"
+          if old not in s:
+              raise SystemExit('expected fallback loader not found')
+          s = s.replace(old, new)
+          s = s.replace("const DEFAULT_CHECKPOINT='data/checkpoints/astracore-demo.json';", "const DEFAULT_CHECKPOINT='data/checkpoints/astracorelm-v1.0.json';")
+          p.write_text(s)
+          PY
+      - name: Remove one-time workflow
+        run: rm .github/workflows/one-time-production-hardening.yml
+      - name: Commit hardening
+        run: |
+          git config user.name 'AstraCore Bot'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add api/[...path].js .github/workflows/one-time-production-hardening.yml
+          git commit -m 'security: remove production model bootstrap fallback [production-hardening-complete]'
+          git push
