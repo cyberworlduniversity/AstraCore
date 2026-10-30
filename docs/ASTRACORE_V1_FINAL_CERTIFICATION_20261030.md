@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-30  
 **Repository:** `cyberworlduniversity/AstraCore`  
-**Certified head:** `d6953e340890061db1155397a7ca3aa50f9fdbfc`
+**Certified head:** `ab4f02e722d034067ea3440cfbb99b219f1f8a13`
 
 ## Final decision
 
@@ -14,7 +14,7 @@ This execution did not weaken certification thresholds or convert missing runtim
 
 | Gate | Status | Evidence / blocker |
 |---|---|---|
-| LM | BLOCKED | 1,236-record dataset; val loss 10.0984 / PPL 24,304.37; test loss 10.1959 / PPL 26,792.99. Quality is insufficient for production promotion. |
+| LM | PRODUCTION BLOCKED | Current AstraCoreLM evidence: validation loss 39.03763198852539 / PPL 89914174044382900 from a single-document training run with 0 independent validation documents; no current independent test loss/PPL; no committed checkpoint path/hash or tokenizer hash; Supabase registry records `astracorelm-v0.1` as `untrained` with no checkpoint path. Architecture metadata also conflicts with current repository defaults, so checkpoint compatibility cannot be certified. |
 | EMBEDDING | PASS | 600-pair benchmark; held-out 120-pair evaluation; R@1 88.33%, R@5 100%, R@10 100%, MRR 94.17%, mean positive cosine 0.9063. |
 | RAG | BLOCKED | Hybrid keyword/semantic search hardened and owner-filtered, but complete authenticated live E2E evidence is still missing. |
 | MEMORY | BLOCKED | Isolation architecture exists; required two-user runtime evidence not completed. |
@@ -35,18 +35,18 @@ This execution did not weaken certification thresholds or convert missing runtim
 | DEPLOYMENT | BLOCKED | Current-head deployment returned Vercel `402 api-deployments-free-per-day`, retry after 86400s. |
 | ROLLBACK | BLOCKED | Prior production deployments are rollback candidates, but rollback execution was not verified. |
 
+## AstraCoreLM Step 2 certification
+
+The dedicated machine-readable evidence is `docs/astracorelm-certification.json`. The model remains **EXPERIMENTAL / PRODUCTION_BLOCKED**. No checkpoint hash, tokenizer hash, approval, or test metric has been fabricated. The production gate remains intact and experimental inference cannot be promoted.
+
 ## Work completed
 
 - Preserved the existing AstraCore architecture.
-- Verified the deterministic LM dataset: 1,236 records, CC0-1.0, SHA-256 `8172fbbf83c808c3d0861cc1226b6cde00536c504f5d8f51c523b232ed84fe65`.
-- Verified train/validation/test evaluation.
-- Completed the 600-pair embedding benchmark with hard negatives.
-- Trained and evaluated AstraCoreEmbed v1.0.
-- Embedding checkpoint: 3,516,544 parameters; 384-dimensional output; model SHA-256 `81a002c3706c63226515442e3c58af57febd0bd3c3e765230c616a8bffa0b45b`.
-- Hardened hybrid knowledge search so keyword-only and semantic-only candidates can participate while filtering by `auth.uid()`.
-- Optimized Supabase RLS policies using init-plan-safe `select auth...` evaluation.
-- Removed overlapping model-version SELECT/ALL policy behavior by separating SELECT/INSERT/UPDATE/DELETE policies.
-- Added HSTS, CSP, Permissions-Policy and existing security headers to Vercel configuration.
+- Added a dedicated AstraCoreLM checkpoint certification artifact with explicit blocked/not-executed states.
+- Updated the production certification record with the current LM evidence instead of the older 10.0984 / 10.1959 loss run.
+- Preserved the production gate requiring checkpoint/tokenizer identity, evaluation evidence, production approval, expiry and revocation checks.
+- Preserved the hardened no-bootstrap production behavior.
+- Verified the deterministic LM unit-test coverage exists for tokenizer roundtrip, model dimensions/loss and bounded generation.
 - Produced this evidence-based certification instead of treating source-code presence as production evidence.
 
 ## Database
@@ -63,10 +63,10 @@ Therefore deployment is **BLOCKED**, not PASS.
 
 ## Required external actions
 
-1. Wait for or otherwise resolve the Vercel deployment quota before deploying the certified head.
+1. Resolve the Vercel deployment quota before deploying the certified head.
 2. Enable Supabase Auth leaked-password protection through the available Auth configuration/dashboard.
 3. After deployment, execute authenticated RAG, memory-isolation, tool-sandbox, multimodal, web-injection, coding, agent-failure, API, UI/E2E, observability and rollback verification.
-4. Do not promote AstraCoreLM until model-quality gates are genuinely satisfied.
+4. Do not promote AstraCoreLM until model-quality and checkpoint-identity gates are genuinely satisfied.
 
 ## Rollback procedure
 
