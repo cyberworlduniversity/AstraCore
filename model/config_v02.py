@@ -19,6 +19,19 @@ class ModelConfigV02:
     max_encoded_sequence_length: int = 128
     max_raw_input_tokens: int = 126
 
+    def __post_init__(self):
+        # Keep the context contract internally consistent when tests or tools
+        # construct a non-default context length. Explicit non-default limits
+        # remain respected.
+        if self.max_encoded_sequence_length == 128 and self.context_length != 128:
+            self.max_encoded_sequence_length = self.context_length
+        if self.max_raw_input_tokens == 126 and self.context_length != 128:
+            self.max_raw_input_tokens = self.context_length - self.special_token_overhead
+        if self.max_raw_input_tokens < 0 or self.max_encoded_sequence_length < self.special_token_overhead:
+            raise ValueError('INVALID_CONTEXT_CONTRACT')
+        if self.max_raw_input_tokens + self.special_token_overhead > self.max_encoded_sequence_length:
+            raise ValueError('INVALID_CONTEXT_CONTRACT')
+
     def to_dict(self): return self.__dict__.copy()
 
     @classmethod
