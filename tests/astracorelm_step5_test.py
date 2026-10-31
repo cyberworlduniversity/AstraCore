@@ -19,6 +19,7 @@ def test_bos_eos_contract_and_context_boundaries():
     assert ids.shape[1] == 3
     assert cfg.special_token_overhead == 2
     assert cfg.max_raw_input_tokens == 6
+    assert cfg.max_encoded_sequence_length == 8
     assert ids.shape[1] <= cfg.max_encoded_sequence_length
     model(ids)
     with pytest.raises(ValueError, match='CONTEXT_LENGTH_EXCEEDED'):
