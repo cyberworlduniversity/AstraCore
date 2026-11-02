@@ -20,9 +20,8 @@ class ModelConfigV02:
     max_raw_input_tokens: int = 126
 
     def __post_init__(self):
-        # Keep the context contract internally consistent when tests or tools
-        # construct a non-default context length. Explicit non-default limits
-        # remain respected.
+        # The v0.2 context contract is BOS/EOS-safe for both default and
+        # explicitly constructed test configurations.
         if self.max_encoded_sequence_length == 128 and self.context_length != 128:
             self.max_encoded_sequence_length = self.context_length
         if self.max_raw_input_tokens == 126 and self.context_length != 128:
