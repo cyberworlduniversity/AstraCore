@@ -65,7 +65,7 @@ jobs:
           python - <<'PY'
           import hashlib, json
           from pathlib import Path
-          root=Path('datasets/astracore-lm-v0.2'); records=root/'records.jsonl'; meta=json.loads((root/'metadata.json').read_text()); expected=(1648,1280,160,208); actual=(meta['record_count'],meta['train_count'],meta['validation_count'],meta['test_count']); assert meta['version']=='0.2.0' and actual==expected, (meta['version'],actual)
+          root=Path('datasets/astracore-lm-v0.2'); records=root/'records.jsonl'; meta=json.loads((root/'metadata.json').read_text()); expected=(1648,1280,160,208); actual=(meta['record_count'],meta['train_count'],meta['validation_count'],meta['test_count']); assert meta['dataset_version']=='0.2.0' and actual==expected, (meta.get('dataset_version'),actual)
           rows=[json.loads(x) for x in records.read_text().splitlines() if x.strip()]; ids={s:{x['document_id'] for x in rows if x['split']==s} for s in ('train','validation','test')}; assert not (ids['train']&ids['validation'] or ids['train']&ids['test'] or ids['validation']&ids['test'])
           dataset_sha=hashlib.sha256(records.read_bytes()).hexdigest(); p=Path('step5-run-manifest.json'); m=json.loads(p.read_text()); m.update({'dataset_sha256':dataset_sha,'dataset_record_count':len(rows),'train_count':meta['train_count'],'validation_count':meta['validation_count'],'test_count':meta['test_count']}); p.write_text(json.dumps(m,indent=2)+'\n'); print('DATASET_SHA256='+dataset_sha); print(json.dumps(meta,indent=2)); print('STEP5D_DATASET_COMPLETE')
           PY
@@ -139,7 +139,7 @@ jobs:
           echo STEP5D_ARTIFACT_START
           mkdir -p step5d-evidence
           if [ -f step5-run-manifest.json ]; then cp step5-run-manifest.json step5d-evidence/step5-run-manifest.json; else printf '%s\n' '{"status":"FAILED","run_id":"NOT_VERIFIED","production_approved":false,"production_gate":"CLOSED"}' > step5d-evidence/step5-run-manifest.json; fi
-          for f in docs/astracorelm-step5-diagnosis.json docs/astracorelm-step5-diagnosis.md docs/astracorelm-step5-training-report.json docs/astracorelm-step5-comparison.json docs/astracorelm-step5-comparison.md; do if [ -f "$f" ]; then cp "$f" step5d-evidence/; fi; done
+          for f in docs/astracorelm-step5-diagnosis.json docs/astracorelm-step5-training-report.json docs/astracorelm-step5-comparison.json; do if [ -f "$f" ]; then cp "$f" step5d-evidence/; fi; done
           if [ -d datasets/astracore-lm-v0.2 ]; then cp -r datasets/astracore-lm-v0.2 step5d-evidence/; fi
           if [ -d artifacts/astracore-lm-v0.2 ]; then cp -r artifacts/astracore-lm-v0.2 step5d-evidence/; fi
           python - <<'PY'
