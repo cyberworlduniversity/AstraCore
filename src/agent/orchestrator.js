@@ -92,6 +92,7 @@ function normalizeToolCalls(value) {
 }
 
 export async function runAgentTask({ task, agentType = 'general', modelClient, knowledgeSearch } = {}) {
+  const startedAt = Date.now();
   const basePlan = createAgentPlan({ task, agentType });
   if (!modelClient || typeof modelClient.generate !== 'function') {
     throw Object.assign(new Error('An approved AstraCoreLM runtime is required for agent execution'), { status: 503 });
@@ -129,14 +130,18 @@ export async function runAgentTask({ task, agentType = 'general', modelClient, k
     } else if (call.name === 'knowledge_search' && typeof knowledgeSearch === 'function') {
       const query = clamp(call.input?.query, 400);
       if (!query) continue;
-      const rows = await knowledgeSearch(query);
-      const safeRows = (Array.isArray(rows) ? rows : []).slice(0, 5).map((row) => ({
-        title: clamp(row.title || row.source || 'Knowledge item', 200),
-        content: redactSecrets(clamp(row.content, MAX_RESULT_CHARS)),
-        score: Number.isFinite(Number(row.score)) ? Number(row.score) : null,
-      }));
-      toolResults.push({ tool: 'knowledge_search', input: { query }, output: safeRows });
-      toolsExecuted.push('knowledge_search');
+      try {
+        const rows = await knowledgeSearch(query);
+        const safeRows = (Array.isArray(rows) ? rows : []).slice(0, 5).map((row) => ({
+          title: clamp(row.title || row.source || 'Knowledge item', 200),
+          content: redactSecrets(clamp(row.content, MAX_RESULT_CHARS)),
+          score: Number.isFinite(Number(row.score)) ? Number(row.score) : null,
+        }));
+        toolResults.push({ tool: 'knowledge_search', input: { query }, output: safeRows });
+        toolsExecuted.push('knowledge_search');
+      } catch (error) {
+        toolResults.push({ tool: 'knowledge_search', input: { query }, error: clamp(error.message || 'Knowledge search failed', 180) });
+      }
     }
   }
 
@@ -151,7 +156,8 @@ export async function runAgentTask({ task, agentType = 'general', modelClient, k
   const reviewOutput = await modelClient.generate(replanPrompt, { maxNewTokens: 64 });
   const review = parseModelObject(reviewOutput?.text);
   const reflection = clamp(review.reflection || 'Reviewed available evidence before producing the final answer.', 600);
-  const followupCalls = review.complete === true ? [] : normalizeToolCalls(review.tool_calls);
+  const remainingToolBudget = Math.max(0, MAX_TOOL_CALLS - requestedCalls.length);
+  const followupCalls = review.complete === true ? [] : normalizeToolCalls(review.tool_calls).slice(0, remainingToolBudget);
   for (const call of followupCalls) {
     if (call.name === 'calculator') {
       const expression = clamp(call.input?.expression, 160);
@@ -199,7 +205,7 @@ export async function runAgentTask({ task, agentType = 'general', modelClient, k
     answer,
     tools_requested: [...requestedCalls, ...followupCalls].map((call) => call.name),
     reflection,
-    metrics: { planning_cycles: followupCalls.length ? 2 : 1, tool_calls_requested: requestedCalls.length + followupCalls.length, tool_calls_succeeded: toolsExecuted.length, tool_calls_failed: toolResults.filter((item) => item.error).length },
+    metrics: { planning_cycles: 2, tool_calls_requested: requestedCalls.length + followupCalls.length, tool_calls_succeeded: toolsExecuted.length, tool_calls_failed: toolResults.filter((item) => item.error).length, duration_ms: Math.max(0, Date.now() - startedAt) },
     tools_executed: [...new Set(toolsExecuted)],
     tool_results: toolResults,
     execution_policy: 'allowlisted_read_only',
