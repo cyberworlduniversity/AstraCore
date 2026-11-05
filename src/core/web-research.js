@@ -38,6 +38,8 @@ function isPublicIPv6(address) {
   const second = Number.parseInt(parts[1] || '0', 16);
   if (first === 0x2002) return false;
   if (first === 0x2001 && (second <= 0x01ff || second === 0x0db8)) return false;
+  // 3fff::/20 is reserved for IPv6 documentation examples.
+  if (first === 0x3fff && second <= 0x0fff) return false;
   return true;
 }
 
