@@ -41,6 +41,9 @@ def build_handler(runtime, token):
         def do_GET(self):
             if self.path != '/health':
                 return self.send_json(404, {'error': 'not_found'})
+            supplied = self.headers.get('Authorization', '')
+            if not supplied.startswith('Bearer ') or not authorize_request(supplied[7:], token):
+                return self.send_json(401, {'error': 'unauthorized'})
             return self.send_json(200, {
                 'ok': True,
                 'model_version': runtime['model_version'],
@@ -64,6 +67,8 @@ def build_handler(runtime, token):
                 return self.send_json(413, {'error': 'request_size_invalid'})
             try:
                 body = json.loads(self.rfile.read(length))
+                if not isinstance(body, dict):
+                    return self.send_json(400, {'error': 'json_object_required'})
                 result = generate_response(runtime, body.get('prompt'), body.get('max_new_tokens', 48))
             except (ValueError, TypeError, json.JSONDecodeError) as exc:
                 return self.send_json(400, {'error': str(exc)[:120]})
