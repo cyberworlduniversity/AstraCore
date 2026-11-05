@@ -3,7 +3,7 @@ const SUPABASE_URL=(process.env.ASTRACORE_SUPABASE_URL||process.env.SUPABASE_URL
 const SUPABASE_KEY=process.env.ASTRACORE_SUPABASE_KEY||process.env.SUPABASE_PUBLISHABLE_KEY||'';
 const SESSION_SECRET=process.env.ASTRA_SESSION_SECRET||'';
 const ADMIN_EMAIL=(process.env.ASTRA_ADMIN_EMAIL||'ehemanathan143@gmail.com').toLowerCase();
-const PUBLIC_URL=(process.env.ASTRA_PUBLIC_URL||'http://127.0.0.1:8787').replace(/\/$/,'');
+const PUBLIC_URL=(process.env.ASTRA_PUBLIC_URL||(process.env.VERCEL_URL?`https://${process.env.VERCEL_URL}`:'http://127.0.0.1:8787')).replace(/\/$/,'');
 const isProduction=process.env.VERCEL==='1'||process.env.NODE_ENV==='production';
 function normalizeEmail(e){return String(e||'').trim().toLowerCase()}
 function encode(v){return Buffer.from(JSON.stringify(v)).toString('base64url')}
