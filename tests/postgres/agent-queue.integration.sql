@@ -7,7 +7,12 @@ create role authenticated nologin;
 create role service_role nologin bypassrls;
 create schema auth;
 create table auth.users (id uuid primary key);
-create or replace function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
+create or replace function auth.uid() returns uuid language sql stable as $ select null::uuid $;
+create or replace function auth.jwt() returns jsonb language sql stable as $
+  select nullif(current_setting('request.jwt.claims', true), '')::jsonb;
+$;
+
+\\ir ../../supabase/migrations/20261105130000_harden_admin_rls_helper.sql
 
 create table public.astracore_agent_runs (
   id uuid primary key default gen_random_uuid(),
@@ -136,6 +141,23 @@ begin
   if has_table_privilege('anon','public.astracore_agent_runs','SELECT')
      or has_table_privilege('anon','public.astracore_agent_runs','INSERT') then
     raise exception 'anonymous role retained agent-run table privileges';
+  end if;
+  if not has_function_privilege('authenticated','public.astracore_is_admin()','EXECUTE') then
+    raise exception 'authenticated role cannot evaluate admin RLS policy';
+  end if;
+  if has_function_privilege('anon','public.astracore_is_admin()','EXECUTE') then
+    raise exception 'anonymous role can execute admin RLS helper';
+  end if;
+  if (select prosecdef from pg_proc where oid='public.astracore_is_admin()'::regprocedure) then
+    raise exception 'admin RLS helper must not run as SECURITY DEFINER';
+  end if;
+  perform set_config('request.jwt.claims','{"email":"ehemanathan143@gmail.com"}',true);
+  if not public.astracore_is_admin() then
+    raise exception 'admin RLS helper did not recognize the configured admin claim';
+  end if;
+  perform set_config('request.jwt.claims','{"email":"other@example.com"}',true);
+  if public.astracore_is_admin() then
+    raise exception 'admin RLS helper accepted a non-admin claim';
   end if;
 
   raise notice 'AstraCore PostgreSQL queue integration checks passed';
