@@ -174,3 +174,150 @@ test('worker passes the active lease identity to progress, completion, and failu
   await failingWorker.instance.runOnce();
   assert.deepEqual(failed, [['worker-test-1', 'lease-token-1']]);
 });
+
+
+import { createSupabaseAgentWorkerAdapters } from '../src/agent/supabase-worker-adapters.js';
+
+const ADAPTER_URL = 'https://astracore-test.supabase.co';
+const ADAPTER_KEY = 's'.repeat(40);
+
+function adapterResponse(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+function adapterHarness(handler) {
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    return handler(String(url), init, calls.length - 1);
+  };
+  return { calls, fetchImpl };
+}
+
+test('Supabase worker adapters reject unsafe remote URLs and weak credentials', () => {
+  for (const supabaseUrl of [
+    'http://supabase.example.com',
+    'https://user:pass@supabase.example.com',
+    'https://supabase.example.com/path',
+    'https://supabase.example.com/?x=1',
+    'https://supabase.example.com/#fragment',
+  ]) {
+    assert.throws(
+      () => createSupabaseAgentWorkerAdapters({ supabaseUrl, serviceRoleKey: ADAPTER_KEY, fetchImpl: async () => adapterResponse([]) }),
+      /HTTPS|origin|credentials|path|query|fragment/,
+    );
+  }
+  assert.throws(
+    () => createSupabaseAgentWorkerAdapters({ supabaseUrl: ADAPTER_URL, serviceRoleKey: 'short', fetchImpl: async () => adapterResponse([]) }),
+    /service-role key/,
+  );
+});
+
+test('Supabase worker adapters allow HTTP only for loopback development', () => {
+  assert.doesNotThrow(() => createSupabaseAgentWorkerAdapters({
+    supabaseUrl: 'http://127.0.0.1:54321',
+    serviceRoleKey: ADAPTER_KEY,
+    fetchImpl: async () => adapterResponse([]),
+  }));
+});
+
+test('claim and heartbeat use the private service-role RPC contract', async () => {
+  const { calls, fetchImpl } = adapterHarness((_url, _init, index) =>
+    index === 0 ? adapterResponse([{ id: 'job-1' }]) : adapterResponse(true));
+  const adapters = createSupabaseAgentWorkerAdapters({ supabaseUrl: ADAPTER_URL, serviceRoleKey: ADAPTER_KEY, fetchImpl });
+  assert.deepEqual(await adapters.claimJobs({ workerId: 'worker-a', limit: 2, leaseSeconds: 90 }), [{ id: 'job-1' }]);
+  assert.equal(await adapters.heartbeatJob({
+    job: { id: 'job-1' }, workerId: 'worker-a', leaseToken: 'lease-1', leaseSeconds: 90,
+  }), true);
+  assert.equal(calls[0].url, ADAPTER_URL + '/rest/v1/rpc/claim_astracore_agent_jobs');
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    p_worker_id: 'worker-a', p_limit: 2, p_lease_seconds: 90,
+  });
+  assert.equal(calls[1].url, ADAPTER_URL + '/rest/v1/rpc/heartbeat_astracore_agent_job');
+  assert.deepEqual(JSON.parse(calls[1].init.body), {
+    p_job_id: 'job-1', p_worker_id: 'worker-a', p_lease_token: 'lease-1', p_lease_seconds: 90,
+  });
+  for (const call of calls) {
+    assert.equal(call.init.headers.apikey, ADAPTER_KEY);
+    assert.equal(call.init.headers.Authorization, 'Bearer ' + ADAPTER_KEY);
+  }
+});
+
+test('run reads are scoped by both run id and owner id', async () => {
+  const { calls, fetchImpl } = adapterHarness(() => adapterResponse([{ id: 'run-1', user_id: 'user-1' }]));
+  const adapters = createSupabaseAgentWorkerAdapters({ supabaseUrl: ADAPTER_URL, serviceRoleKey: ADAPTER_KEY, fetchImpl });
+  assert.deepEqual(await adapters.readRun({ runId: 'run-1', userId: 'user-1' }), { id: 'run-1', user_id: 'user-1' });
+  const parsed = new URL(calls[0].url);
+  assert.equal(parsed.pathname, '/rest/v1/astracore_agent_runs');
+  assert.equal(parsed.searchParams.get('id'), 'eq.run-1');
+  assert.equal(parsed.searchParams.get('user_id'), 'eq.user-1');
+  assert.equal(parsed.searchParams.get('select'), '*');
+  assert.equal(parsed.searchParams.get('limit'), '1');
+});
+
+test('progress and completion persist through lease-guarded RPCs', async () => {
+  const { calls, fetchImpl } = adapterHarness((_url, _init, index) => adapterResponse(index === 0));
+  const adapters = createSupabaseAgentWorkerAdapters({ supabaseUrl: ADAPTER_URL, serviceRoleKey: ADAPTER_KEY, fetchImpl });
+  const common = { job: { id: 'job-1' }, workerId: 'worker-a', leaseToken: 'lease-1' };
+  assert.equal(await adapters.persistProgress({ ...common, state: { phase: 'planning' } }), true);
+  assert.equal(await adapters.completeJob({
+    ...common,
+    result: { status: 'completed', execution: { plan: { steps: ['one', 'two'] }, tool_results: [{ tool: 'calculator' }] } },
+  }), false);
+  assert.equal(calls[0].url, ADAPTER_URL + '/rest/v1/rpc/persist_astracore_agent_run_progress');
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    p_job_id: 'job-1', p_worker_id: 'worker-a', p_lease_token: 'lease-1',
+    p_execution_state: { phase: 'planning' },
+  });
+  assert.equal(calls[1].url, ADAPTER_URL + '/rest/v1/rpc/finalize_astracore_agent_job');
+  assert.deepEqual(JSON.parse(calls[1].init.body), {
+    p_job_id: 'job-1', p_worker_id: 'worker-a', p_lease_token: 'lease-1',
+    p_result: { status: 'completed', execution: { plan: { steps: ['one', 'two'] }, tool_results: [{ tool: 'calculator' }] } },
+    p_execution_state: { phase: 'completed', steps_completed: 2, tool_calls_completed: 1 },
+  });
+});
+
+test('cancelled completion stores a cancelled execution state', async () => {
+  const { calls, fetchImpl } = adapterHarness(() => adapterResponse('cancelled'));
+  const adapters = createSupabaseAgentWorkerAdapters({ supabaseUrl: ADAPTER_URL, serviceRoleKey: ADAPTER_KEY, fetchImpl });
+  assert.equal(await adapters.completeJob({
+    job: { id: 'job-2' }, workerId: 'worker-a', leaseToken: 'lease-2',
+    result: { status: 'cancelled', reason: 'requested' },
+  }), 'cancelled');
+  assert.deepEqual(JSON.parse(calls[0].init.body).p_execution_state, { phase: 'cancelled' });
+});
+
+test('failure and knowledge search preserve retry and tenant-scoping arguments', async () => {
+  const { calls, fetchImpl } = adapterHarness((_url, _init, index) =>
+    index === 0 ? adapterResponse('queued') : adapterResponse([{ title: 'Private note', content: 'text' }]));
+  const adapters = createSupabaseAgentWorkerAdapters({ supabaseUrl: ADAPTER_URL, serviceRoleKey: ADAPTER_KEY, fetchImpl });
+  assert.equal(await adapters.failJob({
+    job: { id: 'job-3' }, workerId: 'worker-b', leaseToken: 'lease-3',
+    error: 'temporary failure', retryable: true,
+  }), 'queued');
+  assert.deepEqual(await adapters.knowledgeSearch({ userId: 'user-2', query: 'q'.repeat(2500), limit: 100 }), [
+    { title: 'Private note', content: 'text' },
+  ]);
+  assert.equal(calls[0].url, ADAPTER_URL + '/rest/v1/rpc/fail_astracore_agent_job');
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    p_job_id: 'job-3', p_worker_id: 'worker-b', p_lease_token: 'lease-3',
+    p_error: 'temporary failure', p_retryable: true,
+  });
+  assert.equal(calls[1].url, ADAPTER_URL + '/rest/v1/rpc/search_astracore_knowledge_for_user');
+  const search = JSON.parse(calls[1].init.body);
+  assert.equal(search.p_user_id, 'user-2');
+  assert.equal(search.search_query.length, 2000);
+  assert.equal(search.result_limit, 20);
+});
+
+test('non-success Supabase responses expose status without leaking response body', async () => {
+  const { fetchImpl } = adapterHarness(() => new Response('sensitive database detail', { status: 503 }));
+  const adapters = createSupabaseAgentWorkerAdapters({ supabaseUrl: ADAPTER_URL, serviceRoleKey: ADAPTER_KEY, fetchImpl });
+  await assert.rejects(
+    adapters.claimJobs({ workerId: 'worker-a', limit: 1, leaseSeconds: 120 }),
+    (error) => error.status === 503 && !error.message.includes('sensitive database detail'),
+  );
+});
