@@ -4,7 +4,7 @@ const MAX_STEP_CHARS = 500;
 const ALLOWED_AGENT_TYPES = new Set(['general', 'research', 'coding', 'data', 'knowledge']);
 
 function cleanText(value, max) {
-  return String(value ?? '').replace(/[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]/g, '').trim().slice(0, max);
+  return String(value ?? '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '').trim().slice(0, max);
 }
 
 /** Persist a non-executing plan until a model-backed planner and sandbox exist. */
