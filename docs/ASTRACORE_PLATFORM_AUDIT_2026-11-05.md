@@ -35,3 +35,10 @@ No production branch, deployment, or Supabase schema/data was modified.
 - Environment metadata was inspected without decrypting secrets. The astracore-ai variables returned by the connector are production-scoped; no preview-scoped entries were returned. The astracore-ai-v01 project returned no environment-variable entries. Verify preview backend/auth connectivity before relying on these previews.
 - Existing GitHub Actions workflows target main pushes and pull requests into main, not feature-branch pushes. They configure Node 20 although package.json requires Node 24. One workflow also grants contents: write and has an automatic commit/push step on main; review that automation before depending on it for releases.
 - Tests for the agent plan and fail-closed tool policy were added on this branch, but no GitHub Actions test run has yet confirmed them.
+
+## Storage and policy verification
+
+- The astracore-files bucket is private, has a 10 MiB file-size limit, and allows the configured document/image MIME types returned by the database.
+- Storage objects has RLS enabled. The four bucket policies restrict operations to the astracore-files bucket and an object-name prefix matching the authenticated user's UUID.
+- The agent-runs owner policies restrict inserts, reads and updates to auth.uid() = user_id. The tool registry is readable by authenticated users; updates are admin-gated.
+- The policy catalog confirms admin and owner policies overlap on several tables, explaining why the advisor reports multiple permissive policies. This is a performance/maintainability finding; policy semantics must be preserved during any cleanup.
