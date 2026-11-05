@@ -107,3 +107,30 @@ test('knowledge-search adapter failures are recorded without crashing the agent'
   assert.match(result.tool_results[0].error, /temporary search outage/);
   assert.equal(result.metrics.duration_ms >= 0, true);
 });
+
+
+test('agent reports durable progress phases to the persistence adapter', async () => {
+  const phases = [];
+  let calls = 0;
+  const result = await runAgentTask({
+    task: 'Explain a concept',
+    modelClient: { generate: async () => ({ text: ++calls === 1 ? JSON.stringify({ steps: ['Understand'] }) : calls === 2 ? JSON.stringify({ complete: true, reflection: 'Enough context.' }) : 'A clear explanation.' }) },
+    onProgress: async (event) => { phases.push(event.phase); },
+  });
+  assert.equal(result.status, 'completed');
+  assert.deepEqual(phases, ['planning', 'executing_tools', 'reviewing', 'generating_answer', 'completed']);
+});
+
+test('agent cancellation is checked between model and tool phases', async () => {
+  let checks = 0;
+  let modelCalls = 0;
+  await assert.rejects(
+    runAgentTask({
+      task: 'Stop this run',
+      modelClient: { generate: async () => ({ text: ++modelCalls === 1 ? JSON.stringify({ steps: ['Start'] }) : 'Should not be called' }) },
+      isCancelled: async () => ++checks >= 2,
+    }),
+    (error) => error.code === 'AGENT_RUN_CANCELLED' && error.status === 409,
+  );
+  assert.equal(modelCalls, 1);
+});
