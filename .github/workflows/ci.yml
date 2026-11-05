@@ -2,7 +2,7 @@ name: AstraCore CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, fix/agent-runs-contract]
   pull_request:
     branches: [main]
 
