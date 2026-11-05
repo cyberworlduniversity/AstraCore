@@ -81,3 +81,50 @@ test('tools endpoint returns registry data without executing a tool', async () =
   assert.equal(res.status, 200);
   assert.equal(res.body.tools[0].name, 'calculator');
 });
+
+
+test('agent POST persists only columns present in the live agent_runs contract', async () => {
+  let inserted = null;
+  const res = await route({
+    method: 'POST',
+    path: '/api/agents',
+    user: { id: 'user-agent-1' },
+    body: JSON.stringify({ task: 'Summarize my notes', agent_type: 'research', steps: ['Read notes', 'Summarize'] }),
+    request: async (_req, requestPath, options) => {
+      assert.equal(requestPath, '/rest/v1/astracore_agent_runs');
+      inserted = JSON.parse(options.body);
+      return [{ id: 'run-1', ...inserted }];
+    }
+  });
+  assert.equal(res.status, 202);
+  assert.equal(inserted.user_id, 'user-agent-1');
+  assert.equal(inserted.agent_type, 'research');
+  assert.equal(inserted.status, 'planned');
+  assert.equal(inserted.plan.task, 'Summarize my notes');
+  assert.deepEqual(inserted.plan.steps, ['Read notes', 'Summarize']);
+  assert.equal(inserted.result.execution, 'planned_only');
+  assert.equal(Object.hasOwn(inserted, 'task'), false);
+  assert.equal(Object.hasOwn(inserted, 'metadata'), false);
+  assert.equal(res.body.tools_authorized, false);
+});
+
+test('agent plan validation rejects empty tasks and bounds step input', async () => {
+  const { createAgentPlan } = await import('../src/agent/runtime.js');
+  assert.throws(() => createAgentPlan({ task: '   ' }), /non-empty task/i);
+  const plan = createAgentPlan({ task: 'x'.repeat(5000), agentType: 'not-real', steps: Array.from({ length: 12 }, (_, i) => 'step ' + i) });
+  assert.equal(plan.task.length, 4000);
+  assert.equal(plan.agent_type, 'general');
+  assert.equal(plan.steps.length, 8);
+  assert.equal(plan.execution_policy, 'plan_only');
+  assert.equal(plan.tools_authorized, false);
+});
+
+test('tool authorization fails closed without active adapter and valid approval', async () => {
+  const { authorizeToolExecution } = await import('../src/agent/runtime.js');
+  assert.equal(authorizeToolExecution({ registryEntry: null }).reason, 'tool_not_registered');
+  assert.equal(authorizeToolExecution({ registryEntry: { status: 'disabled' }, adapterAvailable: true }).reason, 'tool_not_active');
+  assert.equal(authorizeToolExecution({ registryEntry: { status: 'active', risk_level: 'low', timeout_ms: 1000 } }).reason, 'tool_adapter_missing');
+  assert.equal(authorizeToolExecution({ registryEntry: { status: 'active', risk_level: 'medium', timeout_ms: 1000 }, adapterAvailable: true }).reason, 'explicit_user_approval_required');
+  assert.equal(authorizeToolExecution({ registryEntry: { status: 'active', risk_level: 'high', timeout_ms: 1000 }, adapterAvailable: true, userApproved: true }).reason, 'high_risk_sandbox_required');
+  assert.deepEqual(authorizeToolExecution({ registryEntry: { status: 'active', risk_level: 'low', timeout_ms: 1000 }, adapterAvailable: true }), { allowed: true, reason: 'policy_checks_passed', timeout_ms: 1000 });
+});
