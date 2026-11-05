@@ -1,7 +1,21 @@
-name: AstraCore Steps 12-15 Verification
+name: AstraCore Release Gate Verification
 
 on:
   push:
+    branches:
+      - main
+      - feat/agent-modules-audit-2026-11-05
+    paths:
+      - 'src/**'
+      - 'server/**'
+      - 'tests/**'
+      - 'model/**'
+      - 'scripts/**'
+      - 'supabase/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/complete-steps-12-15.yml'
+  pull_request:
     branches: [main]
     paths:
       - 'src/**'
@@ -11,31 +25,46 @@ on:
       - 'scripts/**'
       - 'supabase/**'
       - 'package.json'
-      - '.github/workflows/complete-steps-12-15.yml'
+      - 'package-lock.json'
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: astracore-release-gate-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
       - name: Run Node tests
         run: npm test
-      - name: Verify release gate remains honest
-        run: node --input-type=module - <<'NODE'
-          import { productionGate } from './src/core/production-gate.js';
-          const result = productionGate({
+      - name: Verify production gate remains fail-closed
+        run: |
+          node --input-type=module - <<'NODE'
+          import { evaluateProductionReadiness } from './src/core/production-gate.js';
+          const result = evaluateProductionReadiness({
             model: { status: 'untrained' },
-            embeddings: { status: 'training' },
+            embedding: { status: 'training' },
             evaluation: { status: 'not_ready' },
+            capabilities: [],
+            security: {}
           });
-          if (result.status !== 'BLOCKED') throw new Error('Production gate must fail closed for untrained components');
-          console.log(JSON.stringify(result));
-        NODE
+          if (result.ready !== false) {
+            throw new Error('Production gate must block untrained and unapproved components');
+          }
+          if (!result.blockers.includes('language_model:untrained')) {
+            throw new Error('Expected untrained model blocker was not reported');
+          }
+          console.log(JSON.stringify({ ready: result.ready, blockers: result.blockers }));
+          NODE

@@ -1,0 +1,13 @@
+.git
+.github
+.env
+.env.*
+*.pem
+*.key
+*.token
+artifacts/
+datasets/
+approved-model/
+__pycache__/
+.pytest_cache/
+node_modules/

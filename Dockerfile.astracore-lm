@@ -1,0 +1,30 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+RUN groupadd --system --gid 10001 astracore \
+    && useradd --system --uid 10001 --gid 10001 --home-dir /nonexistent --shell /usr/sbin/nologin astracore
+
+COPY requirements-runtime.txt ./requirements-runtime.txt
+RUN python -m pip install --no-cache-dir --upgrade pip \
+    && python -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu -r requirements-runtime.txt
+
+COPY model ./model
+COPY scripts/serve_lm_v02.py ./scripts/serve_lm_v02.py
+
+RUN mkdir -p /models/astracorelm && chown -R 10001:10001 /app /models
+
+USER 10001:10001
+
+ENV ASTRACORE_LM_HOST=0.0.0.0 \
+    ASTRACORE_LM_PORT=8790 \
+    ASTRACORE_LM_CHECKPOINT=/models/astracorelm \
+    ASTRACORE_LM_APPROVAL_FILE=/models/astracorelm/production-approval.json
+
+EXPOSE 8790
+
+CMD ["python", "scripts/serve_lm_v02.py"]

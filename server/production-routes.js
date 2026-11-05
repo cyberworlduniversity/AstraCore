@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 const MAX_MEMORY = 8000;
 const MAX_TOOL_LIMIT = 50;
 const MAX_EVAL_LIMIT = 50;
@@ -12,7 +13,7 @@ function activeMemoryFilter(userId) {
   return `/rest/v1/astracore_memory_records?user_id=eq.${encodeURIComponent(userId)}&consent_revoked_at=is.null&or=(expires_at.is.null,expires_at.gt.${now})`;
 }
 
-export async function handleProductionRoute({ req, res, url, user, readBody, json, supabaseUserRequest }) {
+export async function handleProductionRoute({ req, res, url, user, readBody, json, supabaseUserRequest, supabaseServiceRequest = null, modelClient = null, knowledgeSearch = null }) {
   const path = url.pathname;
   if (!path.startsWith('/api/memory') && !path.startsWith('/api/tools') && !path.startsWith('/api/models') && !path.startsWith('/api/evaluation') && !path.startsWith('/api/agents')) return false;
 
@@ -92,6 +93,39 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
     return json(res, 200, { evaluations: rows });
   }
 
+  if (path.startsWith('/api/agents/') && req.method === 'GET' && !path.endsWith('/cancel')) {
+    const runId = path.split('/')[3];
+    if (!runId) return json(res, 400, { error: 'agent run id is required' });
+    const rows = await supabaseUserRequest(req, `/rest/v1/astracore_agent_runs?id=eq.${encodeURIComponent(runId)}&user_id=eq.${encodeURIComponent(user.id)}&select=*&limit=1`);
+    if (!rows[0]) return json(res, 404, { error: 'Agent run not found' });
+    return json(res, 200, { agent_run: rows[0] });
+  }
+
+  if (path.startsWith('/api/agents/') && path.endsWith('/cancel') && req.method === 'POST') {
+    const runId = path.split('/')[3];
+    if (!runId) return json(res, 400, { error: 'agent run id is required' });
+    if (typeof supabaseServiceRequest !== 'function') {
+      return json(res, 503, { error: 'AGENT_QUEUE_NOT_CONFIGURED', message: 'The private run-control service is not configured.' });
+    }
+    let outcome;
+    try {
+      outcome = await supabaseServiceRequest('/rest/v1/rpc/request_astracore_agent_run_cancel', {
+        method: 'POST',
+        body: JSON.stringify({ p_user_id: user.id, p_run_id: runId }),
+      });
+    } catch (error) {
+      if (error?.code === 'SUPABASE_SERVICE_ROLE_NOT_CONFIGURED') {
+        return json(res, 503, { error: 'AGENT_QUEUE_NOT_CONFIGURED', message: 'Set the server-only ASTRACORE_SUPABASE_SERVICE_ROLE_KEY in the deployment environment.' });
+      }
+      return json(res, 503, { error: 'AGENT_CANCELLATION_UNAVAILABLE', agent_run_id: runId });
+    }
+    if (outcome === 'not_found') return json(res, 404, { error: 'Agent run not found' });
+    if (outcome === 'already_finished') return json(res, 409, { error: 'AGENT_RUN_ALREADY_FINISHED', agent_run_id: runId });
+    if (outcome === 'already_requested') return json(res, 202, { agent_run_id: runId, cancellation: 'already_requested' });
+    if (outcome !== 'requested') return json(res, 502, { error: 'AGENT_CANCELLATION_CONTRACT_INVALID', agent_run_id: runId });
+    return json(res, 202, { agent_run_id: runId, cancellation: 'requested' });
+  }
+
   if (path === '/api/agents' && req.method === 'GET') {
     const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 20, 1), 50);
     const rows = await supabaseUserRequest(req, `/rest/v1/astracore_agent_runs?select=*&user_id=eq.${encodeURIComponent(user.id)}&order=created_at.desc&limit=${limit}`);
@@ -101,14 +135,82 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
   if (path === '/api/agents' && req.method === 'POST') {
     const body = bodyJson(await readBody(req, 64 * 1024));
     if (!body) return json(res, 400, { error: 'Invalid JSON' });
-    const task = clampText(body.task, 4000);
-    if (!task) return json(res, 400, { error: 'task is required' });
-    const requestedSteps = Array.isArray(body.steps) ? body.steps.slice(0, 8).map((step) => clampText(step, 500)).filter(Boolean) : [];
-    const rows = await supabaseUserRequest(req, '/rest/v1/astracore_agent_runs', {
-      method: 'POST', headers: { Prefer: 'return=representation' },
-      body: JSON.stringify({ user_id: user.id, status: 'planned', task, metadata: { steps: requestedSteps, created_by: 'api', execution_gated: true } })
+    const { createAgentPlan } = await import('../src/agent/runtime.js');
+    let plan;
+    try {
+      plan = createAgentPlan({ task: body.task, steps: body.steps, agentType: body.agent_type });
+    } catch (error) {
+      return json(res, Number(error.status) || 400, { error: error.message });
+    }
+    if (typeof supabaseServiceRequest !== 'function') {
+      return json(res, 503, { error: 'AGENT_QUEUE_NOT_CONFIGURED', message: 'The private run-control service is not configured.' });
+    }
+
+    if (body.execute === true) {
+      const rawIdempotencyKey = req.headers?.['idempotency-key'] || body.idempotency_key || randomUUID();
+      const idempotencyKey = String(rawIdempotencyKey).trim();
+      if (!idempotencyKey || idempotencyKey.length > 128) {
+        return json(res, 400, { error: 'INVALID_IDEMPOTENCY_KEY', message: 'Idempotency keys must contain 1 to 128 characters.' });
+      }
+      const maxAttempts = body.max_attempts === undefined ? 3 : Number(body.max_attempts);
+      if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 10) {
+        return json(res, 400, { error: 'INVALID_MAX_ATTEMPTS', message: 'max_attempts must be between 1 and 10.' });
+      }
+      let created;
+      try {
+        const rows = await supabaseServiceRequest('/rest/v1/rpc/create_astracore_agent_run_and_enqueue', {
+          method: 'POST',
+          headers: { Prefer: 'return=representation' },
+          body: JSON.stringify({
+            p_user_id: user.id,
+            p_agent_type: plan.agent_type,
+            p_plan: plan,
+            p_idempotency_key: idempotencyKey,
+            p_max_attempts: maxAttempts,
+          }),
+        });
+        created = Array.isArray(rows) ? rows[0] : rows;
+      } catch (error) {
+        if (error?.code === 'SUPABASE_SERVICE_ROLE_NOT_CONFIGURED') {
+          return json(res, 503, { error: 'AGENT_QUEUE_NOT_CONFIGURED', message: 'Set the server-only ASTRACORE_SUPABASE_SERVICE_ROLE_KEY in the deployment environment.' });
+        }
+        return json(res, Number(error.status) === 400 ? 400 : 503, {
+          error: 'AGENT_QUEUE_ENQUEUE_FAILED',
+          message: 'The private agent queue could not accept this request. No synchronous fallback was attempted.',
+        });
+      }
+      if (!created?.run_id || !created?.job_id) {
+        return json(res, 502, { error: 'AGENT_QUEUE_CONTRACT_INVALID', message: 'The queue service did not return durable run and job identifiers.' });
+      }
+      return json(res, 202, {
+        agent_run: { id: created.run_id, status: created.run_status || 'running', agent_type: plan.agent_type, plan },
+        job: { id: created.job_id, status: created.job_status || 'queued' },
+        execution: 'queued',
+        idempotent_replay: created.created === false,
+        message: 'Agent run accepted. A private worker must claim the queued job before execution begins.',
+      });
+    }
+
+    let rows;
+    try {
+      rows = await supabaseServiceRequest('/rest/v1/rpc/create_astracore_agent_plan', {
+        method: 'POST',
+        body: JSON.stringify({ p_user_id: user.id, p_agent_type: plan.agent_type, p_plan: plan }),
+      });
+    } catch (error) {
+      if (error?.code === 'SUPABASE_SERVICE_ROLE_NOT_CONFIGURED') {
+        return json(res, 503, { error: 'AGENT_QUEUE_NOT_CONFIGURED', message: 'Set the server-only ASTRACORE_SUPABASE_SERVICE_ROLE_KEY in the deployment environment.' });
+      }
+      return json(res, 503, { error: 'AGENT_PLAN_PERSISTENCE_FAILED', message: 'The private run-control service could not save this plan.' });
+    }
+    const saved = Array.isArray(rows) ? rows[0] : rows;
+    if (!saved?.id) return json(res, 502, { error: 'AGENT_PLAN_CONTRACT_INVALID' });
+    return json(res, 202, {
+      agent_run: saved,
+      execution: 'planned_only',
+      tools_authorized: false,
+      message: 'Plan saved. Tool execution remains disabled until a private worker and approved runtime are available.',
     });
-    return json(res, 202, { agent_run: rows[0] || null, execution: 'planned_only', message: 'Agent execution is gated until the selected tools are authorized and implemented.' });
   }
 
   return json(res, 404, { error: 'Production route not found' });

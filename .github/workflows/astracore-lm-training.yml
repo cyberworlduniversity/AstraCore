@@ -23,8 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - name: Install dependencies
@@ -79,7 +79,7 @@ jobs:
           test -s artifacts/astracore-lm-v1.0/training_state.json
           test -s artifacts/astracore-lm-v1.0/test_evaluation.json
       - name: Upload checkpoint
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: astracore-lm-v1.0-checkpoint
           path: artifacts/astracore-lm-v1.0/

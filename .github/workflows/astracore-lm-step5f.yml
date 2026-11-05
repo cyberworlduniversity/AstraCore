@@ -2,17 +2,6 @@ name: AstraCoreLM Step 5F Execution Recovery
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/astracore-lm-step5f.yml'
-      - 'model/config_v02.py'
-      - 'model/model_v02.py'
-      - 'model/tokenizer.py'
-      - 'scripts/train_lm_v02.py'
-      - 'scripts/evaluate_lm_v02.py'
-      - 'scripts/prepare_lm_dataset_v02.py'
-      - 'tests/astracorelm_step5_test.py'
 
 concurrency:
   group: astracorelm-step5f-main
@@ -29,9 +18,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - name: STEP5F preflight
@@ -65,13 +54,13 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
       - name: Setup Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - name: Initialize evidence state
@@ -226,20 +215,55 @@ jobs:
       - name: Generate Step 5 reports
         if: always()
         run: |
-          set +e
-          python scripts/write_step5_reports.py --artifact-dir artifacts/astracore-lm-v0.2 --manifest step5-run-manifest.json
-          true
+          set -euo pipefail
+          if [ -f artifacts/astracore-lm-v0.2/training_state.json ] && [ -f artifacts/astracore-lm-v0.2/behavioral_evaluation.json ] && [ -f datasets/astracore-lm-v0.2/metadata.json ]; then
+            python scripts/write_step5_reports.py
+          else
+            echo "Step 5 reports skipped: required training, behavioral, or dataset evidence is missing."
+          fi
       - name: STEP5F artifact packaging
         if: always()
         run: |
           set -euo pipefail
-          mkdir -p step5f-evidence
-          cp step5-run-manifest.json step5-stage-status.json step5f-evidence/ 2>/dev/null || true
-          cp artifacts/astracore-lm-v0.2/* step5f-evidence/ 2>/dev/null || true
-          cp -r datasets/astracore-lm-v0.2 step5f-evidence/dataset 2>/dev/null || true
-          sha256sum step5f-evidence/* > step5f-evidence/SHA256SUMS.txt 2>/dev/null || true
+          python - <<'PY'
+          import hashlib, json, shutil
+          from pathlib import Path
+          root=Path('step5f-evidence')
+          if root.exists():
+              shutil.rmtree(root)
+          root.mkdir(parents=True)
+          for name in ('step5-run-manifest.json','step5-stage-status.json'):
+              p=Path(name)
+              if p.is_file():
+                  shutil.copy2(p,root/name)
+          for source,target in ((Path('artifacts/astracore-lm-v0.2'),root/'artifacts'),(Path('datasets/astracore-lm-v0.2'),root/'dataset')):
+              if source.is_dir():
+                  shutil.copytree(source,target)
+          files=sorted(p for p in root.rglob('*') if p.is_file())
+          if not files:
+              raise SystemExit('No evidence files were produced; refusing to publish an empty artifact.')
+          status_path=Path('step5-stage-status.json')
+          if status_path.is_file():
+              status=json.loads(status_path.read_text())
+              status['artifact']='PASS'
+              status_path.write_text(json.dumps(status,indent=2)+'\\n')
+              shutil.copy2(status_path,root/'step5-stage-status.json')
+          manifest_path=Path('step5-run-manifest.json')
+          if manifest_path.is_file():
+              manifest=json.loads(manifest_path.read_text())
+              manifest['stage_status']=json.loads(status_path.read_text()) if status_path.is_file() else {}
+              manifest['production_approved']=False
+              manifest['production_gate']='CLOSED'
+              manifest_path.write_text(json.dumps(manifest,indent=2)+'\\n')
+              shutil.copy2(manifest_path,root/'step5-run-manifest.json')
+          files=sorted(p for p in root.rglob('*') if p.is_file() and p.name!='checksums.sha256')
+          with (root/'checksums.sha256').open('w') as out:
+              for p in files:
+                  out.write(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+str(p.relative_to(root))+'\\n')
+          PY
           tar -czf step5f-evidence.tar.gz step5f-evidence
           sha256sum step5f-evidence.tar.gz > step5f-evidence.sha256
+          sha256sum -c step5f-evidence.sha256
       - name: Upload Step 5F evidence artifact
         if: always()
         uses: actions/upload-artifact@v6
@@ -248,6 +272,7 @@ jobs:
           path: |
             step5f-evidence.tar.gz
             step5f-evidence.sha256
+          if-no-files-found: error
           retention-days: 90
       - name: STEP5F final gate
         if: always()
@@ -257,9 +282,9 @@ jobs:
           import json
           from pathlib import Path
           s=json.loads(Path('step5-stage-status.json').read_text())
-          required=('tests','dataset','training','checkpoint','reload','evaluation','behavioral_evaluation')
+          required=('tests','dataset','training','checkpoint','reload','evaluation','behavioral_evaluation','artifact')
           assert all(s.get(k)=='PASS' for k in required), s
-          assert s.get('runtime') in ('MEASURED','NOT_MEASURED')
+          assert s.get('runtime')=='MEASURED', s
           print(json.dumps(s,indent=2))
           PY
           echo STEP5F_RUN_COMPLETE
