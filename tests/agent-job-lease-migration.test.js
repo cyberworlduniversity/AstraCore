@@ -35,7 +35,7 @@ test('lease heartbeat and completion require matching unexpired owner token', ()
 
 test('failure uses bounded exponential retry and dead letters exhausted jobs', () => {
   assert.match(sql, /least\(300, 5 \* power\(2, greatest\(v_job\.attempts - 1, 0\)\)::integer\)/i);
-  assert.match(sql, /then 'dead_letter'/i);
+  assert.match(sql, /else 'dead_letter'/i);
   assert.match(sql, /dead_letter_exhausted_astracore_agent_jobs/i);
 });
 
