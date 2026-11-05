@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validateResearchUrl, runResearch } from '../src/core/web-research.js';
+import { validateResearchUrl, runResearch, createPinnedFetchAdapter } from '../src/core/web-research.js';
 import { AgentEngine } from '../src/core/agent-engine.js';
 import { ToolRegistry as CanonicalToolRegistry } from '../src/core/tools.js';
 import { ToolRegistry as CompatibilityToolRegistry } from '../src/core/tool-agent-system.js';
@@ -59,4 +59,13 @@ test('agent engine creates plans but never executes requested tools', async () =
 
 test('legacy tool-agent import reuses the single canonical registry', () => {
   assert.equal(CompatibilityToolRegistry, CanonicalToolRegistry);
+});
+
+
+test('pinned research transport fails closed without validated public IP addresses', async () => {
+  const fetchSafe = createPinnedFetchAdapter();
+  await assert.rejects(
+    fetchSafe('https://example.com/', { redirect: 'manual', maxRedirects: 0, resolvedAddresses: [] }),
+    /validated_address_required/,
+  );
 });
