@@ -81,11 +81,11 @@ export function createResearchPlan(question, { maxSources = 8 } = {}) {
 
 export async function runResearch(question, adapters = {}, options = {}) {
   const plan = createResearchPlan(question, options);
-  if (typeof adapters.search !== 'function' || typeof adapters.fetchSafe !== 'function') {
+  if (typeof adapters.search !== 'function') {
     return { status: 'not_implemented', plan, sources: [], rejected: [], answer: null };
   }
 
-  const resolveHost = options.resolveHost || lookup;
+  const resolveHost = options.resolveHost || lookup;\n  const fetchSafe = adapters.fetchSafe || createPinnedFetchAdapter(options.transportOptions);
   const timeoutMs = Math.min(Math.max(Number(options.timeoutMs) || DEFAULT_TIMEOUT_MS, 1000), 30000);
   const searchResults = await adapters.search(plan.question, { limit: plan.maxSources });
   const candidates = Array.isArray(searchResults) ? searchResults.slice(0, plan.maxSources) : [];
@@ -107,7 +107,7 @@ export async function runResearch(question, adapters = {}, options = {}) {
       // The adapter contract is manual redirects only. Redirects are rejected;
       // adapters must pin connections to validation.addresses to prevent DNS rebinding.
       const item = await Promise.race([
-        Promise.resolve(adapters.fetchSafe(validation.url, {
+        Promise.resolve(fetchSafe(validation.url, {
           redirect: 'manual',
           maxRedirects: 0,
           signal: controller.signal,
