@@ -28,13 +28,15 @@ This report records a read-only audit of the connected GitHub, Supabase, and Ver
 
 At the latest check on this branch:
 
-- AstraCore Node test workflow: **passed** on commit `0b4a1496`.
-- Production release-gate verification: **passed** on commit `0b4a1496`.
-- Node.js 24 tests: **passed** on commit `0b4a1496`.
-- Python model/document tests and combined CI: **still running** at the time this report was written.
-- Vercel checks for the latest branch head: **failed because the account hit the Vercel build-rate limit**. A previously ready preview exists for an older commit and is not a verification of the latest branch head.
+- AstraCore Node test workflow: **passed** on code commit `0b4a1496`.
+- Production release-gate verification: **passed** on code commit `0b4a1496`.
+- Node.js 24 tests: **passed**.
+- Python model/document tests: **passed**.
+- Combined AstraCore CI, including the PostgreSQL integration job: **passed** on code commit `0b4a1496`.
+- The current branch head `2413948c` adds this report only; its Node tests and release-gate verification also passed, while its duplicate combined CI run was still in progress at the last poll.
+- Vercel checks for the latest branch head: **failed because the account hit the Vercel build-rate limit**. Previously ready previews are from older commits and do not verify the latest branch head.
 
-A passing test suite does not certify model quality, live database security, worker availability, or production operations.
+Passing CI validates the tested code paths; it does not certify model quality, live database security, worker availability, or production operations.
 
 ## Live Supabase findings
 
