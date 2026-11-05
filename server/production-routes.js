@@ -117,6 +117,8 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
       } catch (error) {
         return json(res, Number(error.status) || 503, { error: 'AGENT_EXECUTION_FAILED', message: error.message });
       }
+      const { evaluateAgentRun } = await import('../src/agent/evaluation.js');
+      const evaluation = evaluateAgentRun({ task: body.task, answer: execution.answer, toolResults: execution.tool_results, metrics: execution.metrics || {} });
       const rows = await supabaseUserRequest(req, '/rest/v1/astracore_agent_runs', {
         method: 'POST', headers: { Prefer: 'return=representation' },
         body: JSON.stringify({
@@ -130,6 +132,9 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
             tools_executed: execution.tools_executed,
             tool_results: execution.tool_results,
             execution_policy: execution.execution_policy,
+            evaluation,
+            metrics: execution.metrics || {},
+            reflection: execution.reflection || null,
           },
         })
       });
@@ -141,6 +146,7 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
         tools_executed: execution.tools_executed,
         tool_results: execution.tool_results,
         execution_policy: execution.execution_policy,
+        evaluation,
         warning: execution.warning,
       });
     }
