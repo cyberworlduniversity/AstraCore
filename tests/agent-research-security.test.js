@@ -28,6 +28,7 @@ test('research URL validation rejects IPv6 transition and special-purpose ranges
   assert.equal((await validateResearchUrl('https://[2001:0000:4136:e378:8000:63bf:3fff:fdd2]')).ok, false);
   assert.equal((await validateResearchUrl('https://[2001:0002::1]')).ok, false);
   assert.equal((await validateResearchUrl('https://[2001:db8::1]')).ok, false);
+  assert.equal((await validateResearchUrl('https://[3fff::1]')).ok, false);
 });
 
 test('research fetch uses safe adapter contract, blocks redirects and marks sources untrusted', async () => {
