@@ -140,3 +140,21 @@ test('expired access tokens can be refreshed while the signed session cookie rem
     Date.now = originalNow;
   }
 });
+
+test('OAuth redirects use the active Vercel deployment URL when no public URL override exists', async () => {
+  const previousPublicUrl = process.env.ASTRA_PUBLIC_URL;
+  const previousVercelUrl = process.env.VERCEL_URL;
+  delete process.env.ASTRA_PUBLIC_URL;
+  process.env.VERCEL_URL = 'astracore-preview.example.vercel.app';
+
+  try {
+    const previewAuth = await import('../server/auth.js?oauth-preview-url');
+    const flow = previewAuth.oauthStart('google');
+    assert.equal(new URL(flow.url).searchParams.get('redirect_to'), 'https://astracore-preview.example.vercel.app/');
+  } finally {
+    if (previousPublicUrl === undefined) delete process.env.ASTRA_PUBLIC_URL;
+    else process.env.ASTRA_PUBLIC_URL = previousPublicUrl;
+    if (previousVercelUrl === undefined) delete process.env.VERCEL_URL;
+    else process.env.VERCEL_URL = previousVercelUrl;
+  }
+});
