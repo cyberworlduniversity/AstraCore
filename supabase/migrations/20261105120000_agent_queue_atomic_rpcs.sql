@@ -347,8 +347,7 @@ grant execute on function public.dead_letter_exhausted_astracore_agent_jobs(inte
 -- Keep agent-run writes behind the private service-role API. Authenticated
 -- users retain owner-scoped SELECT access but cannot forge run status/results.
 revoke all on table public.astracore_agent_runs from anon;
-revoke insert, update, delete, truncate, references, trigger
-  on table public.astracore_agent_runs from authenticated;
+revoke all on table public.astracore_agent_runs from anon, authenticated;
 grant select on table public.astracore_agent_runs to authenticated;
 
 create or replace function public.create_astracore_agent_plan(
