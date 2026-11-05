@@ -2,7 +2,7 @@
 
 ## Scope
 
-Migration `20261105110000_add_agent_job_leases.sql` adds the durable job table and lease RPCs. Migration `20261105120000_agent_queue_atomic_rpcs.sql` adds atomic run creation/enqueue, lease-guarded progress persistence, atomic result finalization, and run failure handling. The authenticated `POST /api/agents` execution path now uses the private service-role RPC; it no longer runs model inference inside the web request.
+Migration `20261105110000_add_agent_job_leases.sql` adds the durable job table and lease RPCs. Migration `20261105120000_agent_queue_atomic_rpcs.sql` adds atomic run creation/enqueue, lease-guarded progress persistence, atomic result finalization, and run failure handling. The authenticated `POST /api/agents` execution path now uses the private service-role RPC; it no longer runs model inference inside the web request. Plan-only creation and cancellation also use service-role RPCs so clients cannot forge statuses or results.
 
 ## Queue lifecycle
 
@@ -19,8 +19,10 @@ Retryable failures use bounded exponential backoff (5 seconds, doubling to a 300
 
 ## Security and operational limits
 
-- RLS is enabled and direct access is revoked from `anon` and `authenticated`.
-- All queue RPCs are revoked from public/client roles and granted only to `service_role`.
+- RLS is enabled on the queue and direct queue access is revoked from `anon` and `authenticated`.
+- The atomic migration revokes direct `INSERT`, `UPDATE`, and `DELETE` on `astracore_agent_runs` from client roles while retaining owner-scoped reads. Plan creation and cancellation use service-role RPCs.
+- Admin control treats run status as read-only; execution state is controlled by the queue/worker.
+- All queue and run-mutation RPCs are revoked from public/client roles and granted only to `service_role`.
 - The service-role key must remain server-side and must never be sent to a browser or mobile client.
 - Payloads should contain only bounded, validated task input and references, not secrets, raw credentials, or full conversation histories.
 - The idempotency key is unique per user when supplied; callers should reuse it for retrying the same enqueue request.
