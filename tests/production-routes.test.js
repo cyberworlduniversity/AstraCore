@@ -11,7 +11,7 @@ function responseCapture() {
   };
 }
 
-function route({ method, path, user = { id: 'u1' }, body = '{}', request }) {
+function route({ method, path, user = { id: 'u1' }, body = '{}', request, modelClient, knowledgeSearch }) {
   const res = responseCapture();
   return handleProductionRoute({
     req: { method }, res,
@@ -20,6 +20,8 @@ function route({ method, path, user = { id: 'u1' }, body = '{}', request }) {
     readBody: async () => body,
     json: (r, status, payload) => { r.writeHead(status); r.end(JSON.stringify(payload)); },
     supabaseUserRequest: request || (async () => []),
+    modelClient,
+    knowledgeSearch,
   }).then(() => res);
 }
 
@@ -127,4 +129,40 @@ test('tool authorization fails closed without active adapter and valid approval'
   assert.equal(authorizeToolExecution({ registryEntry: { status: 'active', risk_level: 'medium', timeout_ms: 1000 }, adapterAvailable: true }).reason, 'explicit_user_approval_required');
   assert.equal(authorizeToolExecution({ registryEntry: { status: 'active', risk_level: 'high', timeout_ms: 1000 }, adapterAvailable: true, userApproved: true }).reason, 'high_risk_sandbox_required');
   assert.deepEqual(authorizeToolExecution({ registryEntry: { status: 'active', risk_level: 'low', timeout_ms: 1000 }, adapterAvailable: true }), { allowed: true, reason: 'policy_checks_passed', timeout_ms: 1000 });
+});
+
+
+test('agent execution requires a model runtime and fails closed when unavailable', async () => {
+  const res = await route({ method: 'POST', path: '/api/agents', body: JSON.stringify({ task: 'Calculate 2+2', execute: true }) });
+  assert.equal(res.status, 503);
+  assert.equal(res.body.error, 'AGENT_RUNTIME_NOT_READY');
+});
+
+test('agent execution uses approved model and only safe built-in tools', async () => {
+  let inserted = null;
+  let calls = 0;
+  const res = await route({
+    method: 'POST',
+    path: '/api/agents',
+    user: { id: 'user-agent-2' },
+    body: JSON.stringify({ task: 'Calculate 12 times 8', agent_type: 'general', execute: true }),
+    modelClient: {
+      generate: async () => ({ text: ++calls === 1
+        ? JSON.stringify({ steps: ['Calculate'], tool_calls: [{ name: 'calculator', input: { expression: '12*8' } }, { name: 'code_execution', input: { code: 'no' } }] })
+        : 'The result is 96.' }),
+    },
+    request: async (_req, requestPath, options) => {
+      assert.equal(requestPath, '/rest/v1/astracore_agent_runs');
+      inserted = JSON.parse(options.body);
+      return [{ id: 'run-2', ...inserted }];
+    },
+  });
+  assert.equal(res.status, 201);
+  assert.equal(calls, 2);
+  assert.equal(inserted.user_id, 'user-agent-2');
+  assert.equal(inserted.status, 'completed');
+  assert.equal(inserted.result.execution, 'completed');
+  assert.deepEqual(inserted.result.tools_executed, ['calculator']);
+  assert.equal(inserted.result.answer, 'The result is 96.');
+  assert.equal(res.body.execution_policy, 'allowlisted_read_only');
 });
