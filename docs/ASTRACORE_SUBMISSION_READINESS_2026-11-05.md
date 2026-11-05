@@ -10,7 +10,7 @@ This report records a read-only audit of the connected GitHub, Supabase, and Ver
 
 - Repository: `cyberworlduniversity/AstraCore`
 - Branch: `fix/agent-runs-contract`
-- Code head audited before this report refresh: `2853f30e4eb96407a598df41af5a57eb59a9ede9`
+- Last fully verified code/test head: `428ad9c614891a45f1fd82fb586a5995afe9b851`
 - Pull request: [#9 — AstraCore agent, memory, RAG and security hardening](https://github.com/cyberworlduniversity/AstraCore/pull/9)
 - PR remains draft and unmerged.
 
@@ -28,18 +28,19 @@ This report records a read-only audit of the connected GitHub, Supabase, and Ver
 10. **Memory:** both chat paths retrieve only the authenticated user's explicitly consented, non-revoked, non-expired memories. Memory context is marked untrusted and common credential patterns are redacted before model use. Missing owner identity fails closed.
 11. **Vercel agent route:** the Vercel handler now passes the server-only Supabase service client into the agent routes. A handler-level test verifies that the service-role RPC is called with the server secret and authenticated user's ID. The secret is still missing from the live Vercel environment, so agent queue execution remains unavailable until configured.
 12. **Diagnostics and configuration:** the API returns a clear `AGENT_QUEUE_NOT_CONFIGURED` response when the server-only service-role secret is absent; `.env.example` documents server-only queue and embedding variables.
+13. **CI maintenance:** upgraded checkout, Node, Python, and artifact GitHub Actions to current Node 24-compatible major versions. No old v1-v5 references remain for these action families in the 12 workflow files.
 
 ## Automated verification
 
-- Node test suite: **147 passed, 0 failed** on commit `1f9ffcd9`. This includes the Vercel agent-route wiring, embedding-client, signed-cookie, memory, and SSRF tests.
-- Release-gate verification: passed on code commit `36e8d3d5`; a later run for `1f9ffcd9` was still running at the last poll.
-- Python model/document tests: a previous run reported **34 passed**; the current full rerun was still in progress at the last poll.
-- PostgreSQL integration: an initial run exposed a malformed test delimiter. The delimiter was fixed in commit `0310e141`; the corrected integration rerun was still in progress at the last poll. Do not treat the new migration test as passed until that run completes.
-- The current branch head `2853f30e` adds an additional missing-service-role configuration test; its CI run was queued at the last poll.
+- Node test suite: **148 passed, 0 failed** on code/test commit `428ad9c6`. This includes the Vercel agent-route wiring, missing-service-role diagnostics, embedding-client, signed-cookie, memory, and SSRF tests.
+- Release-gate verification: **passed** on `428ad9c6`.
+- AstraCore Agent Branch CI: **passed** on `428ad9c6`.
+- Combined AstraCore CI: **passed** on `428ad9c6`, including **34 Python tests**, the PostgreSQL agent-queue integration test, worker lifecycle/tenant-isolation checks, Python serving compilation, and Node syntax checks.
+- The current branch head `67b96310` upgrades GitHub Actions to Node 24-compatible action versions; its fresh CI run was still in progress at the last poll.
 - Vercel runtime error review: **no runtime errors found** in the selected last-seven-day window.
-- A Vercel Preview deployment exists for earlier branch commit `676b0454`, but **there is no deployment for current branch head `2853f30e`**. Earlier GitHub Vercel checks also reported a build-rate-limit failure. Do not use the older preview as verification of the latest code.
+- A Vercel Preview deployment exists for earlier branch commit `676b0454`, but **there is no deployment for current branch head `67b96310`**. Earlier GitHub Vercel checks also reported a build-rate-limit failure. Do not use the older preview as verification of the latest code.
 
-Passing Node tests does not certify model quality, live database security, worker availability, or production operations.
+Passing CI validates the tested code paths; it does not certify model quality, live database security, worker availability, or production operations.
 
 ## Live Supabase findings
 
