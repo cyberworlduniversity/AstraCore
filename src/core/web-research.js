@@ -29,7 +29,15 @@ function isPublicIPv6(address) {
   // Only global-unicast 2000::/3 is accepted. This excludes loopback,
   // link-local, unique-local, multicast, IPv4-mapped and unspecified ranges.
   if (!/^(2[0-9a-f]{3}|3[0-9a-f]{3}):/.test(value)) return false;
-  if (value.startsWith('2001:db8:')) return false;
+
+  // Exclude IETF protocol-assignment space (2001::/23), documentation
+  // space (2001:db8::/32), and 6to4 (2002::/16). 6to4 can tunnel to
+  // embedded private IPv4 destinations and must not be treated as public.
+  const parts = value.split(':');
+  const first = Number.parseInt(parts[0] || '0', 16);
+  const second = Number.parseInt(parts[1] || '0', 16);
+  if (first === 0x2002) return false;
+  if (first === 0x2001 && (second <= 0x01ff || second === 0x0db8)) return false;
   return true;
 }
 
