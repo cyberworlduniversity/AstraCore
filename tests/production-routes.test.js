@@ -86,28 +86,27 @@ test('tools endpoint returns registry data without executing a tool', async () =
 });
 
 
-test('agent POST persists only columns present in the live agent_runs contract', async () => {
-  let inserted = null;
+test('agent POST creates a plan through the private service-role RPC', async () => {
+  let call = null;
   const res = await route({
     method: 'POST',
     path: '/api/agents',
     user: { id: 'user-agent-1' },
     body: JSON.stringify({ task: 'Summarize my notes', agent_type: 'research', steps: ['Read notes', 'Summarize'] }),
-    request: async (_req, requestPath, options) => {
-      assert.equal(requestPath, '/rest/v1/astracore_agent_runs');
-      inserted = JSON.parse(options.body);
-      return [{ id: 'run-1', ...inserted }];
-    }
+    serviceRequest: async (requestPath, options) => {
+      call = { requestPath, options };
+      return [{ id: 'run-1', status: 'planned', plan: JSON.parse(options.body).p_plan }];
+    },
   });
   assert.equal(res.status, 202);
-  assert.equal(inserted.user_id, 'user-agent-1');
-  assert.equal(inserted.agent_type, 'research');
-  assert.equal(inserted.status, 'planned');
-  assert.equal(inserted.plan.task, 'Summarize my notes');
-  assert.deepEqual(inserted.plan.steps, ['Read notes', 'Summarize']);
-  assert.equal(inserted.result.execution, 'planned_only');
-  assert.equal(Object.hasOwn(inserted, 'task'), false);
-  assert.equal(Object.hasOwn(inserted, 'metadata'), false);
+  assert.equal(call.requestPath, '/rest/v1/rpc/create_astracore_agent_plan');
+  const payload = JSON.parse(call.options.body);
+  assert.equal(payload.p_user_id, 'user-agent-1');
+  assert.equal(payload.p_agent_type, 'research');
+  assert.equal(payload.p_plan.task, 'Summarize my notes');
+  assert.deepEqual(payload.p_plan.steps, ['Read notes', 'Summarize']);
+  assert.equal(res.body.agent_run.id, 'run-1');
+  assert.equal(res.body.execution, 'planned_only');
   assert.equal(res.body.tools_authorized, false);
 });
 
@@ -215,28 +214,25 @@ test('agent run detail is scoped to the authenticated owner', async () => {
   assert.equal(res.body.agent_run.status, 'running');
 });
 
-test('agent cancellation is owner-scoped and cooperative', async () => {
-  const calls = [];
+test('agent cancellation is owner-scoped and uses the private cancellation RPC', async () => {
+  let call = null;
   const res = await route({
     method: 'POST', path: '/api/agents/run-456/cancel', user: { id: 'owner-b' },
-    request: async (_req, requestPath, options) => {
-      calls.push({ requestPath, options });
-      if (!options) return [{ id: 'run-456', finished_at: null, cancel_requested_at: null }];
-      return [{ id: 'run-456', cancel_requested_at: '2026-11-05T10:00:00.000Z' }];
+    serviceRequest: async (requestPath, options) => {
+      call = { requestPath, options };
+      return 'requested';
     },
   });
   assert.equal(res.status, 202);
   assert.equal(res.body.cancellation, 'requested');
-  assert.match(calls[0].requestPath, /user_id=eq\.owner-b/);
-  assert.match(calls[1].requestPath, /finished_at=is\.null/);
-  assert.equal(calls[1].options.method, 'PATCH');
-  assert.ok(calls[1].options.body.includes('cancel_requested_at'));
+  assert.equal(call.requestPath, '/rest/v1/rpc/request_astracore_agent_run_cancel');
+  assert.deepEqual(JSON.parse(call.options.body), { p_user_id: 'owner-b', p_run_id: 'run-456' });
 });
 
 test('finished agent runs cannot be cancelled', async () => {
   const res = await route({
     method: 'POST', path: '/api/agents/run-done/cancel',
-    request: async () => [{ id: 'run-done', finished_at: '2026-11-05T10:00:00.000Z', cancel_requested_at: null }],
+    serviceRequest: async () => 'already_finished',
   });
   assert.equal(res.status, 409);
   assert.equal(res.body.error, 'AGENT_RUN_ALREADY_FINISHED');
@@ -246,7 +242,7 @@ test('finished agent runs cannot be cancelled', async () => {
 test('legacy completed agent runs cannot be cancelled before finished_at was introduced', async () => {
   const res = await route({
     method: 'POST', path: '/api/agents/legacy-done/cancel',
-    request: async () => [{ id: 'legacy-done', status: 'completed', finished_at: null, cancel_requested_at: null }],
+    serviceRequest: async () => 'already_finished',
   });
   assert.equal(res.status, 409);
   assert.equal(res.body.error, 'AGENT_RUN_ALREADY_FINISHED');
