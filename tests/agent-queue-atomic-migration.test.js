@@ -80,3 +80,11 @@ test('plan creation and cancellation are restricted to private service-role RPCs
   assert.match(sql, /grant execute on function public\.create_astracore_agent_plan[\s\S]*to service_role/i);
   assert.match(sql, /grant execute on function public\.request_astracore_agent_run_cancel[\s\S]*to service_role/i);
 });
+
+
+test('tenant-scoped worker knowledge search is service-role only', () => {
+  assert.match(sql, /create or replace function public\.search_astracore_knowledge_for_user/i);
+  assert.match(sql, /where c\.user_id = p_user_id/i);
+  assert.match(sql, /revoke all on function public\.search_astracore_knowledge_for_user/i);
+  assert.match(sql, /grant execute on function public\.search_astracore_knowledge_for_user[\s\S]*to service_role/i);
+});
