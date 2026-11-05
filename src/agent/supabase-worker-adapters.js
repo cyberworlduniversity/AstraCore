@@ -57,12 +57,13 @@ export function createSupabaseAgentWorkerAdapters({
     },
 
     async heartbeatJob({ job, workerId, leaseToken, leaseSeconds }) {
-      return rpc('heartbeat_astracore_agent_job', {
+      const renewed = await rpc('heartbeat_astracore_agent_job', {
         p_job_id: job.id,
         p_worker_id: workerId,
         p_lease_token: leaseToken,
         p_lease_seconds: leaseSeconds,
-      }) === true;
+      });
+      return renewed === true;
     },
 
     async readRun({ runId, userId }) {
@@ -77,12 +78,13 @@ export function createSupabaseAgentWorkerAdapters({
     },
 
     async persistProgress({ job, state, workerId, leaseToken }) {
-      return rpc('persist_astracore_agent_run_progress', {
+      const saved = await rpc('persist_astracore_agent_run_progress', {
         p_job_id: job.id,
         p_worker_id: workerId,
         p_lease_token: leaseToken,
         p_execution_state: state,
-      }) === true;
+      });
+      return saved === true;
     },
 
     async completeJob({ job, workerId, leaseToken, result }) {
