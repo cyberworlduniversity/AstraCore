@@ -113,7 +113,10 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
         method: 'POST',
         body: JSON.stringify({ p_user_id: user.id, p_run_id: runId }),
       });
-    } catch {
+    } catch (error) {
+      if (error?.code === 'SUPABASE_SERVICE_ROLE_NOT_CONFIGURED') {
+        return json(res, 503, { error: 'AGENT_QUEUE_NOT_CONFIGURED', message: 'Set the server-only ASTRACORE_SUPABASE_SERVICE_ROLE_KEY in the deployment environment.' });
+      }
       return json(res, 503, { error: 'AGENT_CANCELLATION_UNAVAILABLE', agent_run_id: runId });
     }
     if (outcome === 'not_found') return json(res, 404, { error: 'Agent run not found' });
@@ -168,6 +171,9 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
         });
         created = Array.isArray(rows) ? rows[0] : rows;
       } catch (error) {
+        if (error?.code === 'SUPABASE_SERVICE_ROLE_NOT_CONFIGURED') {
+          return json(res, 503, { error: 'AGENT_QUEUE_NOT_CONFIGURED', message: 'Set the server-only ASTRACORE_SUPABASE_SERVICE_ROLE_KEY in the deployment environment.' });
+        }
         return json(res, Number(error.status) === 400 ? 400 : 503, {
           error: 'AGENT_QUEUE_ENQUEUE_FAILED',
           message: 'The private agent queue could not accept this request. No synchronous fallback was attempted.',
@@ -191,7 +197,10 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
         method: 'POST',
         body: JSON.stringify({ p_user_id: user.id, p_agent_type: plan.agent_type, p_plan: plan }),
       });
-    } catch {
+    } catch (error) {
+      if (error?.code === 'SUPABASE_SERVICE_ROLE_NOT_CONFIGURED') {
+        return json(res, 503, { error: 'AGENT_QUEUE_NOT_CONFIGURED', message: 'Set the server-only ASTRACORE_SUPABASE_SERVICE_ROLE_KEY in the deployment environment.' });
+      }
       return json(res, 503, { error: 'AGENT_PLAN_PERSISTENCE_FAILED', message: 'The private run-control service could not save this plan.' });
     }
     const saved = Array.isArray(rows) ? rows[0] : rows;
