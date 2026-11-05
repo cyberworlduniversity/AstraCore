@@ -12,7 +12,7 @@ function activeMemoryFilter(userId) {
   return `/rest/v1/astracore_memory_records?user_id=eq.${encodeURIComponent(userId)}&consent_revoked_at=is.null&or=(expires_at.is.null,expires_at.gt.${now})`;
 }
 
-export async function handleProductionRoute({ req, res, url, user, readBody, json, supabaseUserRequest }) {
+export async function handleProductionRoute({ req, res, url, user, readBody, json, supabaseUserRequest, modelClient = null, knowledgeSearch = null }) {
   const path = url.pathname;
   if (!path.startsWith('/api/memory') && !path.startsWith('/api/tools') && !path.startsWith('/api/models') && !path.startsWith('/api/evaluation') && !path.startsWith('/api/agents')) return false;
 
@@ -101,6 +101,49 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
   if (path === '/api/agents' && req.method === 'POST') {
     const body = bodyJson(await readBody(req, 64 * 1024));
     if (!body) return json(res, 400, { error: 'Invalid JSON' });
+    if (body.execute === true) {
+      if (!modelClient || typeof modelClient.generate !== 'function') {
+        return json(res, 503, { error: 'AGENT_RUNTIME_NOT_READY', message: 'Agent execution requires an approved AstraCoreLM runtime.' });
+      }
+      const { runAgentTask } = await import('../src/agent/orchestrator.js');
+      let execution;
+      try {
+        execution = await runAgentTask({
+          task: body.task,
+          agentType: body.agent_type,
+          modelClient,
+          knowledgeSearch,
+        });
+      } catch (error) {
+        return json(res, Number(error.status) || 503, { error: 'AGENT_EXECUTION_FAILED', message: error.message });
+      }
+      const rows = await supabaseUserRequest(req, '/rest/v1/astracore_agent_runs', {
+        method: 'POST', headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({
+          user_id: user.id,
+          agent_type: execution.plan.agent_type,
+          status: 'completed',
+          plan: execution.plan,
+          result: {
+            execution: 'completed',
+            answer: execution.answer,
+            tools_executed: execution.tools_executed,
+            tool_results: execution.tool_results,
+            execution_policy: execution.execution_policy,
+          },
+        })
+      });
+      return json(res, 201, {
+        agent_run: rows[0] || null,
+        execution: 'completed',
+        answer: execution.answer,
+        plan: execution.plan,
+        tools_executed: execution.tools_executed,
+        tool_results: execution.tool_results,
+        execution_policy: execution.execution_policy,
+        warning: execution.warning,
+      });
+    }
     const { createAgentPlan } = await import('../src/agent/runtime.js');
     let plan;
     try {
