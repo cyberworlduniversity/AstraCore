@@ -134,3 +134,21 @@ test('worker enforces bounded claim size and valid heartbeat configuration', asy
   await assert.rejects(instance.runOnce({ limit: 26 }), /limit/);
   assert.throws(() => createAgentWorker({ workerId: 'w', claimJobs: async () => [], heartbeatJob: async () => true, readRun: async () => ({}), persistProgress: async () => true, executeTask: async () => ({}), completeJob: async () => true, failJob: async () => true, leaseSeconds: 15, heartbeatIntervalMs: 15000 }), /heartbeatIntervalMs/);
 });
+
+
+test('worker maps an atomic cancellation result returned by the database', async () => {
+  const { instance } = worker({
+    completeJob: async () => 'cancelled',
+  });
+  const result = await instance.runOnce();
+  assert.equal(result.results[0].outcome, 'cancelled');
+});
+
+test('worker maps an atomic already-finished result returned by the database', async () => {
+  const { instance } = worker({
+    readRun: async () => makeRun({ status: 'completed', finished_at: '2026-11-05T10:00:00Z' }),
+    completeJob: async () => 'already_finished',
+  });
+  const result = await instance.runOnce();
+  assert.equal(result.results[0].outcome, 'already_finished');
+});
