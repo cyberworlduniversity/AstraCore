@@ -83,13 +83,13 @@ export function createAgentWorker({
       if (run.cancel_requested_at || run.status === 'cancelled') {
         assertLease();
         completionAttempted = true;
-        const committed = await completeJob({ job, result: { status: 'cancelled', reason: 'cancellation_requested' } });
+        const committed = await completeJob({ job, workerId, leaseToken: job.lease_token, result: { status: 'cancelled', reason: 'cancellation_requested' } });
         return { job_id: job.id, outcome: completionOutcome(committed, 'cancelled') };
       }
       if (TERMINAL_RUN_STATES.has(run.status) || run.finished_at) {
         assertLease();
         completionAttempted = true;
-        const committed = await completeJob({ job, result: { status: 'already_finished' } });
+        const committed = await completeJob({ job, workerId, leaseToken: job.lease_token, result: { status: 'already_finished' } });
         return { job_id: job.id, outcome: completionOutcome(committed, 'already_finished') };
       }
       if (run.status !== 'running') {
@@ -104,7 +104,7 @@ export function createAgentWorker({
 
       const onProgress = async (state) => {
         assertLease();
-        const saved = await persistProgress({ job, state });
+        const saved = await persistProgress({ job, state, workerId, leaseToken: job.lease_token });
         if (saved !== true) {
           leaseLost = true;
           throw leaseLostError();
@@ -124,7 +124,7 @@ export function createAgentWorker({
       await heartbeatInFlight;
       assertLease();
       completionAttempted = true;
-      const committed = await completeJob({ job, result: { status: 'completed', execution } });
+      const committed = await completeJob({ job, workerId, leaseToken: job.lease_token, result: { status: 'completed', execution } });
       return { job_id: job.id, outcome: completionOutcome(committed, 'completed') };
     } catch (error) {
       await heartbeatInFlight;
@@ -138,7 +138,7 @@ export function createAgentWorker({
         try {
           assertLease();
           completionAttempted = true;
-          const committed = await completeJob({ job, result: { status: 'cancelled', reason: 'cooperative_cancellation' } });
+          const committed = await completeJob({ job, workerId, leaseToken: job.lease_token, result: { status: 'cancelled', reason: 'cooperative_cancellation' } });
           return { job_id: job.id, outcome: committed === true ? 'cancelled' : 'lease_lost' };
         } catch {
           return { job_id: job.id, outcome: 'completion_unknown' };
@@ -148,7 +148,7 @@ export function createAgentWorker({
       const retryable = Number.isFinite(status) ? status >= 500 : true;
       try {
         assertLease();
-        const state = await failJob({ job, error: clean(error?.message || 'Agent worker failed'), retryable });
+        const state = await failJob({ job, workerId, leaseToken: job.lease_token, error: clean(error?.message || 'Agent worker failed'), retryable });
         return { job_id: job.id, outcome: state || 'failure_recorded', retryable };
       } catch {
         return { job_id: job.id, outcome: leaseLost ? 'lease_lost' : 'failure_persist_failed', retryable };
