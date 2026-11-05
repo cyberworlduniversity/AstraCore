@@ -24,7 +24,7 @@ declare
   v_task text;
 begin
   if p_user_id is null then raise exception 'user id is required'; end if;
-  if p_agent_type not in ('general', 'research', 'coding', 'data', 'knowledge') then
+  if p_agent_type is null or p_agent_type not in ('general', 'research', 'coding', 'data', 'knowledge') then
     raise exception 'invalid agent type';
   end if;
   if p_plan is null or jsonb_typeof(p_plan) <> 'object' or octet_length(p_plan::text) > 16384 then
@@ -134,6 +134,7 @@ declare
   v_status text;
   v_final_result jsonb;
   v_state jsonb;
+  v_updated integer;
 begin
   if p_result is null or jsonb_typeof(p_result) <> 'object'
      or octet_length(p_result::text) > 1048576 then
@@ -201,6 +202,8 @@ begin
       last_error = null
   where id = v_run.id and user_id = v_run.user_id
     and finished_at is null;
+  get diagnostics v_updated = row_count;
+  if v_updated <> 1 then return 'run_not_active'; end if;
 
   update public.astracore_agent_jobs
   set status = 'succeeded',
@@ -288,3 +291,54 @@ comment on function public.create_astracore_agent_run_and_enqueue(uuid, text, js
   'Atomically creates one user-owned agent run and its queued job; service-role only.';
 comment on function public.finalize_astracore_agent_job(uuid, text, uuid, jsonb, jsonb) is
   'Atomically persists a leased worker result and marks the corresponding queue job succeeded.';
+
+
+-- Reconcile exhausted queue leases and their associated runs together.
+create or replace function public.dead_letter_exhausted_astracore_agent_jobs(
+  p_limit integer default 100
+)
+returns integer
+language plpgsql
+security invoker
+set search_path = pg_catalog, public
+as $$
+declare
+  v_job public.astracore_agent_jobs%rowtype;
+  v_count integer := 0;
+begin
+  if p_limit is null or p_limit < 1 or p_limit > 500 then
+    raise exception 'limit must be between 1 and 500';
+  end if;
+
+  for v_job in
+    select * from public.astracore_agent_jobs
+    where status = 'leased'
+      and lease_expires_at < now()
+      and attempts >= max_attempts
+    order by lease_expires_at
+    limit p_limit
+    for update skip locked
+  loop
+    update public.astracore_agent_jobs
+    set status = 'dead_letter',
+        lease_owner = null, lease_token = null, lease_expires_at = null,
+        finished_at = now(), heartbeat_at = now(), updated_at = now(),
+        last_error = coalesce(last_error, 'Worker lease expired after maximum attempts')
+    where id = v_job.id;
+
+    update public.astracore_agent_runs
+    set status = case when cancel_requested_at is not null then 'cancelled' else 'failed' end,
+        result = jsonb_build_object('execution', case when cancel_requested_at is not null then 'cancelled' else 'failed' end),
+        execution_state = jsonb_build_object('phase', case when cancel_requested_at is not null then 'cancelled' else 'failed' end),
+        heartbeat_at = now(), finished_at = now(),
+        last_error = case when cancel_requested_at is not null then null else coalesce(v_job.last_error, 'Worker lease expired after maximum attempts') end
+    where id = v_job.run_id and user_id = v_job.user_id and finished_at is null;
+
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
+end;
+$$;
+
+revoke all on function public.dead_letter_exhausted_astracore_agent_jobs(integer) from public, anon, authenticated;
+grant execute on function public.dead_letter_exhausted_astracore_agent_jobs(integer) to service_role;
