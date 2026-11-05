@@ -10,7 +10,7 @@ This report records a read-only audit of the connected GitHub, Supabase, and Ver
 
 - Repository: `cyberworlduniversity/AstraCore`
 - Branch: `fix/agent-runs-contract`
-- Current report commit: `2853f30e4eb96407a598df41af5a57eb59a9ede9`
+- Code head audited before this report refresh: `2853f30e4eb96407a598df41af5a57eb59a9ede9`
 - Pull request: [#9 — AstraCore agent, memory, RAG and security hardening](https://github.com/cyberworlduniversity/AstraCore/pull/9)
 - PR remains draft and unmerged.
 
