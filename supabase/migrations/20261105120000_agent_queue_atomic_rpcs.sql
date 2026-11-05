@@ -342,3 +342,78 @@ $$;
 
 revoke all on function public.dead_letter_exhausted_astracore_agent_jobs(integer) from public, anon, authenticated;
 grant execute on function public.dead_letter_exhausted_astracore_agent_jobs(integer) to service_role;
+
+
+-- Keep agent-run writes behind the private service-role API. Authenticated
+-- users retain owner-scoped SELECT access but cannot forge run status/results.
+revoke all on table public.astracore_agent_runs from anon;
+revoke insert, update, delete, truncate, references, trigger
+  on table public.astracore_agent_runs from authenticated;
+grant select on table public.astracore_agent_runs to authenticated;
+
+create or replace function public.create_astracore_agent_plan(
+  p_user_id uuid,
+  p_agent_type text,
+  p_plan jsonb
+)
+returns table(id uuid, status text, plan jsonb)
+language plpgsql
+security invoker
+set search_path = pg_catalog, public
+as $$
+declare
+  v_id uuid;
+begin
+  if p_user_id is null then raise exception 'user id is required'; end if;
+  if p_agent_type is null or p_agent_type not in ('general', 'research', 'coding', 'data', 'knowledge') then
+    raise exception 'invalid agent type';
+  end if;
+  if p_plan is null or jsonb_typeof(p_plan) <> 'object' or octet_length(p_plan::text) > 16384 then
+    raise exception 'invalid or oversized agent plan';
+  end if;
+  if p_plan->>'task' is null or length(trim(p_plan->>'task')) < 1 or length(p_plan->>'task') > 4000 then
+    raise exception 'agent task must contain 1 to 4000 characters';
+  end if;
+
+  insert into public.astracore_agent_runs(user_id, agent_type, status, plan, result)
+  values (p_user_id, p_agent_type, 'planned', p_plan,
+          jsonb_build_object('execution', 'planned_only', 'tools_authorized', false))
+  returning astracore_agent_runs.id into v_id;
+
+  return query select runs.id, runs.status, runs.plan
+    from public.astracore_agent_runs as runs where runs.id = v_id;
+end;
+$$;
+
+create or replace function public.request_astracore_agent_run_cancel(
+  p_user_id uuid,
+  p_run_id uuid
+)
+returns text
+language plpgsql
+security invoker
+set search_path = pg_catalog, public
+as $$
+declare
+  v_run public.astracore_agent_runs%rowtype;
+begin
+  if p_user_id is null or p_run_id is null then raise exception 'user and run ids are required'; end if;
+  select * into v_run from public.astracore_agent_runs
+  where id = p_run_id and user_id = p_user_id for update;
+  if not found then return 'not_found'; end if;
+  if v_run.finished_at is not null or v_run.status in ('completed', 'failed', 'blocked', 'cancelled') then
+    return 'already_finished';
+  end if;
+  if v_run.cancel_requested_at is not null then return 'already_requested'; end if;
+
+  update public.astracore_agent_runs
+  set cancel_requested_at = now(), heartbeat_at = now()
+  where id = p_run_id and user_id = p_user_id and finished_at is null;
+  return 'requested';
+end;
+$$;
+
+revoke all on function public.create_astracore_agent_plan(uuid, text, jsonb) from public, anon, authenticated;
+revoke all on function public.request_astracore_agent_run_cancel(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.create_astracore_agent_plan(uuid, text, jsonb) to service_role;
+grant execute on function public.request_astracore_agent_run_cancel(uuid, uuid) to service_role;
