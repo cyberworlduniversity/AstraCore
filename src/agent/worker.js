@@ -3,7 +3,7 @@ import { redactSecrets } from '../core/safety-layer.js';
 const TERMINAL_RUN_STATES = new Set(['completed', 'failed', 'blocked', 'cancelled']);
 
 function clean(value, max = 500) {
-  return redactSecrets(String(value ?? '').replace(/[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F]/g, '').trim()).slice(0, max);
+  return redactSecrets(String(value ?? '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '').trim()).slice(0, max);
 }
 
 function leaseLostError() {
@@ -34,7 +34,7 @@ export function createAgentWorker({
     throw new Error('A valid workerId is required');
   }
   for (const [name, fn] of Object.entries({ claimJobs, heartbeatJob, readRun, persistProgress, executeTask, completeJob, failJob })) {
-    if (typeof fn !== 'function') throw new Error(`Worker adapter ${name} is required`);
+    if (typeof fn !== 'function') throw new Error(\`Worker adapter \${name} is required\`);
   }
   if (!Number.isInteger(leaseSeconds) || leaseSeconds < 15 || leaseSeconds > 900) {
     throw new Error('leaseSeconds must be between 15 and 900');
@@ -75,11 +75,13 @@ export function createAgentWorker({
       }
 
       if (run.cancel_requested_at || run.status === 'cancelled') {
+        assertLease();
         completionAttempted = true;
         const committed = await completeJob({ job, result: { status: 'cancelled', reason: 'cancellation_requested' } });
         return { job_id: job.id, outcome: committed === true ? 'cancelled' : 'lease_lost' };
       }
       if (TERMINAL_RUN_STATES.has(run.status) || run.finished_at) {
+        assertLease();
         completionAttempted = true;
         const committed = await completeJob({ job, result: { status: 'already_finished' } });
         return { job_id: job.id, outcome: committed === true ? 'already_finished' : 'lease_lost' };
@@ -128,6 +130,7 @@ export function createAgentWorker({
       }
       if (error?.code === 'AGENT_RUN_CANCELLED') {
         try {
+          assertLease();
           completionAttempted = true;
           const committed = await completeJob({ job, result: { status: 'cancelled', reason: 'cooperative_cancellation' } });
           return { job_id: job.id, outcome: committed === true ? 'cancelled' : 'lease_lost' };
@@ -138,10 +141,11 @@ export function createAgentWorker({
       const status = Number(error?.status);
       const retryable = Number.isFinite(status) ? status >= 500 : true;
       try {
+        assertLease();
         const state = await failJob({ job, error: clean(error?.message || 'Agent worker failed'), retryable });
         return { job_id: job.id, outcome: state || 'failure_recorded', retryable };
       } catch {
-        return { job_id: job.id, outcome: 'failure_persist_failed', retryable };
+        return { job_id: job.id, outcome: leaseLost ? 'lease_lost' : 'failure_persist_failed', retryable };
       }
     } finally {
       clearInterval(timer);
