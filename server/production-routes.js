@@ -212,8 +212,8 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
         metrics: execution.metrics || {},
         reflection: execution.reflection || null,
       };
-      await supabaseUserRequest(req, runPath + '&finished_at=is.null', {
-        method: 'PATCH', headers: { Prefer: 'return=minimal' },
+      const finalized = await supabaseUserRequest(req, runPath + '&finished_at=is.null&cancel_requested_at=is.null', {
+        method: 'PATCH', headers: { Prefer: 'return=representation' },
         body: JSON.stringify({
           status: 'completed',
           plan: execution.plan,
@@ -224,9 +224,19 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
           last_error: null,
         }),
       });
+      if (!finalized[0]) {
+        if (await isCancelled()) {
+          await supabaseUserRequest(req, runPath + '&finished_at=is.null', {
+            method: 'PATCH', headers: { Prefer: 'return=minimal' },
+            body: JSON.stringify({ status: 'cancelled', result: { execution: 'cancelled' }, execution_state: { phase: 'cancelled' }, heartbeat_at: isoNow(), finished_at: isoNow() }),
+          });
+          return json(res, 409, { error: 'AGENT_RUN_CANCELLED', agent_run_id: runId, message: 'The agent run was cancelled.' });
+        }
+        return json(res, 409, { error: 'AGENT_RUN_FINALIZATION_CONFLICT', agent_run_id: runId });
+      }
       const refreshed = await supabaseUserRequest(req, runPath + '&select=*&limit=1');
       return json(res, 200, {
-        agent_run: refreshed[0] || { id: runId, status: 'completed', result: finalResult },
+        agent_run: refreshed[0] || finalized[0] || { id: runId, status: 'completed', result: finalResult },
         execution: 'completed',
         answer: execution.answer,
         plan: execution.plan,
