@@ -44,14 +44,16 @@ test('worker adapters scope run reads by both run and user identifiers', async (
   assert.match(calls[0].url, /user_id=eq\.user-1/);
 });
 
-test('worker progress and finalization call lease-guarded RPCs', async () => {
+test('worker heartbeat, progress, and finalization call lease-guarded RPCs', async () => {
   const { calls, adapters } = fixture();
   const job = { id: 'job-1' };
+  assert.equal(await adapters.heartbeatJob({ job, workerId: 'worker-a', leaseToken: 'token-a', leaseSeconds: 120 }), true);
   assert.equal(await adapters.persistProgress({ job, state: { phase: 'planning' }, workerId: 'worker-a', leaseToken: 'token-a' }), true);
   assert.equal(await adapters.completeJob({ job, workerId: 'worker-a', leaseToken: 'token-a', result: { status: 'completed', execution: { answer: 'done' } } }), 'completed');
-  assert.ok(calls[0].url.endsWith('/persist_astracore_agent_run_progress'));
-  assert.ok(calls[1].url.endsWith('/finalize_astracore_agent_job'));
-  assert.equal(JSON.parse(calls[1].options.body).p_lease_token, 'token-a');
+  assert.ok(calls[0].url.endsWith('/heartbeat_astracore_agent_job'));
+  assert.ok(calls[1].url.endsWith('/persist_astracore_agent_run_progress'));
+  assert.ok(calls[2].url.endsWith('/finalize_astracore_agent_job'));
+  assert.equal(JSON.parse(calls[2].options.body).p_lease_token, 'token-a');
 });
 
 test('worker knowledge search requires explicit user scope', async () => {
