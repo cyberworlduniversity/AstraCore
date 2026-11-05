@@ -39,6 +39,9 @@ jobs:
       - name: Run Python test suite
         run: python -m pytest -q
 
+      - name: Compile AstraCoreLM serving modules
+        run: python -m py_compile model/serving_v02.py scripts/serve_lm_v02.py
+
       - name: Syntax check runtime files
         run: |
           node --check server/server.js
