@@ -67,8 +67,7 @@ test('all atomic queue RPCs are restricted to the service role', () => {
 
 
 test('authenticated users cannot directly write agent run records', () => {
-  assert.match(sql, /revoke all on table public\.astracore_agent_runs from anon/i);
-  assert.match(sql, /revoke insert, update, delete, truncate, references, trigger[\s\S]*from authenticated/i);
+  assert.match(sql, /revoke all on table public\.astracore_agent_runs from anon, authenticated/i);
   assert.match(sql, /grant select on table public\.astracore_agent_runs to authenticated/i);
 });
 
