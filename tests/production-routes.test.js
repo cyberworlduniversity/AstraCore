@@ -158,7 +158,7 @@ test('agent execution uses approved model and only safe built-in tools', async (
     },
   });
   assert.equal(res.status, 201);
-  assert.equal(calls, 2);
+  assert.equal(calls, 3);
   assert.equal(inserted.user_id, 'user-agent-2');
   assert.equal(inserted.status, 'completed');
   assert.equal(inserted.result.execution, 'completed');
