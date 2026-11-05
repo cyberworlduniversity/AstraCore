@@ -4,7 +4,7 @@ import { loadCheckpoint } from '../src/ai/checkpoint.js';
 import { generate } from '../src/ai/inference.js';
 import { ASTRA_CAPABILITIES, capabilityManifest } from '../src/core/capabilities.js';
 import { KnowledgeRouter } from '../src/core/knowledge.js';
-import { currentUser,isAdmin,signup,login,oauthStart,createOAuthSession,listUsers,sessionCookie,clearSessionCookie,ADMIN_EMAIL,supabaseUserRequest } from '../server/auth.js';
+import { currentUser,isAdmin,signup,login,oauthStart,exchangeOAuthCode,clearOAuthCookie,listUsers,sessionCookie,clearSessionCookie,ADMIN_EMAIL,supabaseUserRequest } from '../server/auth.js';
 import { knowledgeRoute } from '../server/knowledge-api.js';
 import { handleProductionRoute } from '../server/production-routes.js';
 import { cloudRoute } from '../server/cloud-api.js';
@@ -35,10 +35,10 @@ if(req.method==='GET'&&url.pathname==='/api/health'){await ensureEngines();retur
 if(req.method==='GET'&&url.pathname==='/api/auth/me'){const user=await currentUser(req);if(req.astracoreRefreshedSession)res.astracoreSession=sessionCookie(req.astracoreRefreshedSession);return json(res,200,{authenticated:Boolean(user),user:user?{id:user.id,email:user.email,name:user.name,provider:user.provider,isAdmin:isAdmin(user)}:null})}
 if(req.method==='POST'&&url.pathname==='/api/auth/signup'){let body;try{body=JSON.parse(await readBody(req))}catch{return json(res,400,{error:'Invalid JSON'})}const result=await signup(body.email,body.password,body.name);if(!result.token)return json(res,202,{user:result.user||null,message:'Account created. Check your email to confirm the account, then sign in.'});return json(res,201,{user:result.user},{'set-cookie':sessionCookie(result.token)})}
 if(req.method==='POST'&&url.pathname==='/api/auth/login'){let body;try{body=JSON.parse(await readBody(req))}catch{return json(res,400,{error:'Invalid JSON'})}const result=await login(body.email,body.password);if(!result.token)return json(res,401,{error:'Authentication did not return a session. Confirm the account email and try again.'});return json(res,200,{user:result.user},{'set-cookie':sessionCookie(result.token)})}
-if(req.method==='POST'&&url.pathname==='/api/auth/oauth/session'){let body;try{body=JSON.parse(await readBody(req))}catch{return json(res,400,{error:'Invalid JSON'})}const result=await createOAuthSession(body.access_token,body.refresh_token,body.expires_in);return json(res,200,{user:result.user},{'set-cookie':sessionCookie(result.token)})}
+if(req.method==='POST'&&url.pathname==='/api/auth/oauth/exchange'){let body;try{body=JSON.parse(await readBody(req))}catch{return json(res,400,{error:'Invalid JSON'})}const result=await exchangeOAuthCode(body.code,body.state,req);return json(res,200,{user:result.user},{'set-cookie':[sessionCookie(result.token),clearOAuthCookie()]})}
 if(req.method==='POST'&&url.pathname==='/api/auth/logout')return json(res,200,{ok:true},{'set-cookie':clearSessionCookie()});
-if(req.method==='GET'&&url.pathname==='/api/auth/google')try{return redirect(res,oauthStart('google'))}catch(e){return json(res,e.status||500,{error:e.message})}
-if(req.method==='GET'&&url.pathname==='/api/auth/github')try{return redirect(res,oauthStart('github'))}catch(e){return json(res,e.status||500,{error:e.message})}
+if(req.method==='GET'&&url.pathname==='/api/auth/google')try{const flow=oauthStart('google');return redirect(res,flow.url,flow.cookie)}catch(e){return json(res,e.status||500,{error:e.message})}
+if(req.method==='GET'&&url.pathname==='/api/auth/github')try{const flow=oauthStart('github');return redirect(res,flow.url,flow.cookie)}catch(e){return json(res,e.status||500,{error:e.message})}
 if(req.method==='GET'&&url.pathname.startsWith('/api/auth/google/callback'))return redirect(res,'/?auth_error=google_oauth_not_configured');
 if(req.method==='GET'&&url.pathname.startsWith('/api/auth/github/callback'))return redirect(res,'/?auth_error=github_oauth_not_configured');
 
