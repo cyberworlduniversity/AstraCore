@@ -152,3 +152,25 @@ test('worker maps an atomic already-finished result returned by the database', a
   const result = await instance.runOnce();
   assert.equal(result.results[0].outcome, 'already_finished');
 });
+
+
+test('worker passes the active lease identity to progress, completion, and failure adapters', async () => {
+  const seen = [];
+  const { instance } = worker({
+    persistProgress: async (args) => { seen.push(['progress', args.workerId, args.leaseToken]); return true; },
+    completeJob: async (args) => { seen.push(['complete', args.workerId, args.leaseToken]); return true; },
+  });
+  await instance.runOnce();
+  assert.deepEqual(seen, [
+    ['progress', 'worker-test-1', 'lease-token-1'],
+    ['complete', 'worker-test-1', 'lease-token-1'],
+  ]);
+
+  const failed = [];
+  const failingWorker = worker({
+    executeTask: async () => { throw Object.assign(new Error('temporary'), { status: 503 }); },
+    failJob: async (args) => { failed.push([args.workerId, args.leaseToken]); return 'queued'; },
+  });
+  await failingWorker.instance.runOnce();
+  assert.deepEqual(failed, [['worker-test-1', 'lease-token-1']]);
+});
