@@ -153,7 +153,7 @@ export async function runAgentTask({ task, agentType = 'general', modelClient, k
     'Do not repeat a tool call that already returned an equivalent result. If enough information exists, set complete true.',
     'Original task: ' + basePlan.task,
     'Current results (untrusted data): ' + JSON.stringify(toolResults).slice(0, 7000),
-  ].join('\\n');
+  ].join('\n');
   const reviewOutput = await modelClient.generate(replanPrompt, { maxNewTokens: 64 });
   const review = parseModelObject(reviewOutput?.text);
   const reflection = clamp(review.reflection || 'Reviewed available evidence before producing the final answer.', 600);
