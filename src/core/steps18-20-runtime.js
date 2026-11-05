@@ -2,9 +2,9 @@ import { rankAndDedupeSources, selectMemories, buildBoundedContext } from './pro
 import { selectRelevantMemories } from './memory-system.js';
 import { authorizeTool, isolateUntrustedContent } from './step16-27.js';
 
-export function buildRagContext({ query, knowledge = [], memories = [], extra = '' } = {}) {
+export function buildRagContext({ query, userId, knowledge = [], memories = [], extra = '' } = {}) {
   const rankedKnowledge = rankAndDedupeSources(knowledge, 12);
-  const consentedMemories = selectRelevantMemories(memories, query, 8);
+  const consentedMemories = selectRelevantMemories(memories, query, 8, { userId });
   const selected = selectMemories(consentedMemories, 8);
   const context = buildBoundedContext({
     query,
