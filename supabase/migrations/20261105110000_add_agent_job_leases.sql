@@ -4,8 +4,8 @@ create table if not exists public.astracore_agent_jobs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   run_id uuid,
-  idempotency_key text,
-  payload jsonb not null,
+  idempotency_key text check (idempotency_key is null or length(idempotency_key) between 1 and 128),
+  payload jsonb not null check (octet_length(payload::text) <= 65536),
   status text not null default 'queued'
     check (status in ('queued', 'leased', 'succeeded', 'dead_letter')),
   attempts integer not null default 0 check (attempts >= 0),
@@ -21,7 +21,7 @@ create table if not exists public.astracore_agent_jobs (
   finished_at timestamptz,
   constraint astracore_agent_jobs_lease_shape check (
     (status = 'leased' and lease_owner is not null and lease_token is not null and lease_expires_at is not null)
-    or status <> 'leased'
+    or (status <> 'leased' and lease_owner is null and lease_token is null and lease_expires_at is null)
   )
 );
 
@@ -47,7 +47,7 @@ create or replace function public.claim_astracore_agent_jobs(
 )
 returns setof public.astracore_agent_jobs
 language plpgsql
-security definer
+security invoker
 set search_path = pg_catalog, public
 as $$
 begin
@@ -96,7 +96,7 @@ create or replace function public.heartbeat_astracore_agent_job(
 )
 returns boolean
 language plpgsql
-security definer
+security invoker
 set search_path = pg_catalog, public
 as $$
 declare
@@ -126,7 +126,7 @@ create or replace function public.complete_astracore_agent_job(
 )
 returns boolean
 language plpgsql
-security definer
+security invoker
 set search_path = pg_catalog, public
 as $$
 declare
@@ -160,7 +160,7 @@ create or replace function public.fail_astracore_agent_job(
 )
 returns text
 language plpgsql
-security definer
+security invoker
 set search_path = pg_catalog, public
 as $$
 declare
@@ -209,7 +209,7 @@ create or replace function public.dead_letter_exhausted_astracore_agent_jobs(
 )
 returns integer
 language plpgsql
-security definer
+security invoker
 set search_path = pg_catalog, public
 as $$
 declare
