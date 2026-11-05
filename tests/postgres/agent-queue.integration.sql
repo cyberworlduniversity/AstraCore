@@ -62,7 +62,7 @@ create policy astracore_models_admin on public.astracore_model_registry
 
 \ir ../../supabase/migrations/20261105140000_remove_duplicate_admin_rls_policies.sql
 
-do $
+do $policy_test$
 begin
   if exists (
     select 1 from pg_policies
@@ -81,7 +81,7 @@ begin
     raise exception 'canonical admin policies were unexpectedly removed';
   end if;
 end;
-$;
+$policy_test$;
 
 create table public.astracore_agent_runs (
   id uuid primary key default gen_random_uuid(),
