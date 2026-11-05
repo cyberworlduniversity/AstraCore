@@ -151,3 +151,96 @@ export async function runResearch(question, adapters = {}, options = {}) {
   })));
   return { status: sources.length ? 'retrieved' : 'blocked', plan, sources, rejected, answer: null };
 }
+
+
+/**
+ * Create a pinned, redirect-free HTTP(S) transport for web research.
+ * The hostname is retained for HTTP Host and TLS certificate verification,
+ * while DNS lookup is pinned to the addresses validated before this call.
+ */
+export function createPinnedFetchAdapter({ maxBytes = 1_000_000, requestTimeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+  return async function fetchSafe(value, options = {}) {
+    const url = new URL(value);
+    if (!['http:', 'https:'].includes(url.protocol)) throw new Error('unsupported_protocol');
+    if (options.redirect !== 'manual' || options.maxRedirects !== 0) {
+      throw new Error('redirect_policy_required');
+    }
+    const pinned = [...new Set((options.resolvedAddresses || []).filter((address) => isPublicAddress(address)))];
+    if (!pinned.length) throw new Error('validated_address_required');
+    const timeoutMs = Math.min(Math.max(Number(options.timeoutMs) || requestTimeoutMs, 1000), 30000);
+    const limit = Math.min(Math.max(Number(maxBytes) || 1_000_000, 1024), 5_000_000);
+    const transport = url.protocol === 'https:' ? await import('node:https') : await import('node:http');
+    const isLiteral = isIP(url.hostname.replace(/^\\[|\\]$/g, '')) !== 0;
+    let addressIndex = 0;
+
+    return await new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (error, result) => {
+        if (settled) return;
+        settled = true;
+        if (error) reject(error);
+        else resolve(result);
+      };
+      const lookupPinned = (hostname, lookupOptions, callback) => {
+        if (hostname.toLowerCase() !== url.hostname.toLowerCase()) {
+          callback(new Error('unexpected_dns_hostname'));
+          return;
+        }
+        const records = pinned.map((address) => ({ address, family: isIP(address) }));
+        if (lookupOptions?.all) {
+          callback(null, records);
+          return;
+        }
+        const record = records[addressIndex++ % records.length];
+        callback(null, record.address, record.family);
+      };
+      const requestOptions = {
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port || (url.protocol === 'https:' ? 443 : 80),
+        path: url.pathname + url.search,
+        method: 'GET',
+        headers: { accept: 'text/html,text/plain,application/xhtml+xml,application/json;q=0.8', 'user-agent': 'AstraCoreResearch/1.0' },
+        agent: false,
+        ...(isLiteral ? {} : { lookup: lookupPinned }),
+        ...(url.protocol === 'https:' ? { rejectUnauthorized: true, servername: isLiteral ? undefined : url.hostname } : {}),
+      };
+      const request = transport.request(requestOptions, (response) => {
+        const status = Number(response.statusCode || 0);
+        const chunks = [];
+        let bytes = 0;
+        const declaredLength = Number(response.headers['content-length'] || 0);
+        if (declaredLength > limit) {
+          response.destroy();
+          finish(new Error('response_too_large'));
+          return;
+        }
+        response.on('data', (chunk) => {
+          bytes += chunk.length;
+          if (bytes > limit) {
+            response.destroy(new Error('response_too_large'));
+            return;
+          }
+          chunks.push(chunk);
+        });
+        response.on('end', () => {
+          finish(null, {
+            status,
+            url: url.href,
+            title: '',
+            content: Buffer.concat(chunks).toString('utf8'),
+            contentType: String(response.headers['content-type'] || ''),
+          });
+        });
+        response.on('error', (error) => finish(error));
+      });
+      request.setTimeout(timeoutMs, () => request.destroy(new Error('research_fetch_timeout')));
+      if (options.signal) {
+        if (options.signal.aborted) request.destroy(new Error('research_fetch_aborted'));
+        else options.signal.addEventListener('abort', () => request.destroy(new Error('research_fetch_aborted')), { once: true });
+      }
+      request.on('error', (error) => finish(error));
+      request.end();
+    });
+  };
+}
