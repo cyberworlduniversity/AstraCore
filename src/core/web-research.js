@@ -81,7 +81,7 @@ export function createResearchPlan(question, { maxSources = 8 } = {}) {
 
 export async function runResearch(question, adapters = {}, options = {}) {
   const plan = createResearchPlan(question, options);
-  if (typeof adapters.search !== 'function' || typeof adapters.fetch !== 'function') {
+  if (typeof adapters.search !== 'function' || typeof adapters.fetchSafe !== 'function') {
     return { status: 'not_implemented', plan, sources: [], rejected: [], answer: null };
   }
 
@@ -107,7 +107,7 @@ export async function runResearch(question, adapters = {}, options = {}) {
       // The adapter contract is manual redirects only. Redirects are rejected;
       // adapters must pin connections to validation.addresses to prevent DNS rebinding.
       const item = await Promise.race([
-        Promise.resolve(adapters.fetch(validation.url, {
+        Promise.resolve(adapters.fetchSafe(validation.url, {
           redirect: 'manual',
           maxRedirects: 0,
           signal: controller.signal,
@@ -121,11 +121,11 @@ export async function runResearch(question, adapters = {}, options = {}) {
       const status = Number(item?.status || item?.statusCode || 200);
       const returnedUrl = item?.url ? new URL(item.url, validation.url).href : validation.url;
       if ((status >= 300 && status < 400) || item?.redirected === true || returnedUrl !== validation.url) {
-        return { index, error: 'redirect_blocked' };
+        return { index, url: validation.url, error: 'redirect_blocked' };
       }
-      if (status < 200 || status >= 300) return { index, error: 'upstream_http_error' };
+      if (status < 200 || status >= 300) return { index, url: validation.url, error: 'upstream_http_error' };
       const content = redactSecrets(String(item?.content || '').slice(0, MAX_RESPONSE_CHARS));
-      if (!content.trim()) return { index, error: 'empty_content' };
+      if (!content.trim()) return { index, url: validation.url, error: 'empty_content' };
       return {
         index,
         source: {
@@ -138,7 +138,7 @@ export async function runResearch(question, adapters = {}, options = {}) {
         },
       };
     } catch (error) {
-      return { index, error: error instanceof Error && error.message === 'research_fetch_timeout' ? 'fetch_timeout' : 'fetch_failed' };
+      return { index, url: validation.url, error: error instanceof Error && error.message === 'research_fetch_timeout' ? 'fetch_timeout' : 'fetch_failed' };
     } finally {
       clearTimeout(timer);
     }
@@ -146,7 +146,7 @@ export async function runResearch(question, adapters = {}, options = {}) {
 
   const sources = fetched.filter((item) => item.source).map((item) => item.source);
   rejected.push(...fetched.filter((item) => item.error).map((item) => ({
-    url: String(candidates.find((candidate) => candidate?.url)?.url || '').slice(0, 1000),
+    url: String(item.url || '').slice(0, 1000),
     reason: item.error,
   })));
   return { status: sources.length ? 'retrieved' : 'blocked', plan, sources, rejected, answer: null };
