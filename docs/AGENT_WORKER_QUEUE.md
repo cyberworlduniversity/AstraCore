@@ -2,7 +2,7 @@
 
 ## Scope
 
-Migration `20261105110000_add_agent_job_leases.sql` adds a separate durable job table and service-role RPCs. It deliberately does **not** change the current synchronous `POST /api/agents` path. The live `astracore_agent_runs` table contract has not yet been verified, so queue integration is deferred rather than guessed.
+Migration `20261105110000_add_agent_job_leases.sql` adds the durable job table and lease RPCs. Migration `20261105120000_agent_queue_atomic_rpcs.sql` adds atomic run creation/enqueue, lease-guarded progress persistence, atomic result finalization, and run failure handling. The authenticated `POST /api/agents` execution path now uses the private service-role RPC; it no longer runs model inference inside the web request.
 
 ## Queue lifecycle
 
@@ -24,7 +24,9 @@ Retryable failures use bounded exponential backoff (5 seconds, doubling to a 300
 - The service-role key must remain server-side and must never be sent to a browser or mobile client.
 - Payloads should contain only bounded, validated task input and references, not secrets, raw credentials, or full conversation histories.
 - The idempotency key is unique per user when supplied; callers should reuse it for retrying the same enqueue request.
-- These SQL functions are foundations, not a deployed worker service. No scheduler, queue consumer, enqueue API, or automatic retries are active yet.
+- The authenticated API creates a run and queue job atomically using `create_astracore_agent_run_and_enqueue`. The caller's verified session supplies the user ID; the server-only service-role client calls the RPC. Request idempotency keys are bounded to 128 characters.
+- `persist_astracore_agent_run_progress` checks the live lease before updating the run snapshot. `finalize_astracore_agent_job` saves the run result and marks the queue job succeeded in one transaction, including a cancellation-race check. `fail_astracore_agent_job` records retry state or terminal failure for the associated run.
+- These SQL functions and API changes are committed to the development branch but have not been applied to the live database. A private worker service and scheduler are still not deployed.
 
 ## Worker runtime foundation
 
@@ -35,10 +37,10 @@ The `completeJob` adapter has a strict contract: persist the agent-run terminal 
 ## Required next integration work
 
 1. Verify the actual Supabase project schema and migration history.
-2. Add an authenticated enqueue route that writes the run and queue record in one transaction/RPC, preserving user ownership and idempotency.
-3. Build a private worker process that claims jobs, renews leases, checks cancellation, and uses only approved model/tool adapters.
-4. Persist results with lease-token guarded completion; ensure duplicate deliveries are safe.
-5. Add integration tests against a disposable Postgres/Supabase instance, including concurrent claim races and lease expiry.
-6. Configure and observe a trusted scheduler/worker deployment before enabling background execution.
+1. Apply and validate the ordered schema migrations in a controlled development database before enabling the queue API.
+2. Build a private worker process that claims jobs, renews leases, checks cancellation, and uses only approved model/tool adapters.
+3. Connect worker adapters to the new service-role RPCs and test cancellation, retries, duplicate delivery, and uncertain completion.
+4. Add integration tests against a disposable Postgres/Supabase instance, including concurrent enqueue/claim races and lease expiry.
+5. Configure and observe a trusted scheduler/worker deployment before enabling background execution.
 
-Do not apply this migration to production until reviewed against the live schema. The current API remains synchronous and no production deployment has been performed.
+Do not apply this migration to production until reviewed against the live schema. The API execution endpoint now queues work but returns an accepted job until a private worker is deployed. No production deployment or live migration has been performed.
