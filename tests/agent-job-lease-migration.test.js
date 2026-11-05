@@ -44,3 +44,16 @@ test('worker RPCs are service-role only', () => {
   assert.match(sql, /revoke all on function[\s\S]*from public, anon, authenticated/i);
   assert.match(sql, /grant execute on function[\s\S]*to service_role/i);
 });
+
+
+test('queue schema bounds payload and idempotency key size', () => {
+  assert.match(sql, /octet_length\(payload::text\) <= 65536/i);
+  assert.match(sql, /length\(idempotency_key\) between 1 and 128/i);
+});
+
+test('queue RPCs use invoker privileges and remain service-role only', () => {
+  assert.doesNotMatch(sql, /security definer/i);
+  assert.match(sql, /security invoker/i);
+  assert.match(sql, /revoke all on function[\\s\\S]*from public, anon, authenticated/i);
+  assert.match(sql, /grant execute on function[\\s\\S]*to service_role/i);
+});
