@@ -1,4 +1,8 @@
 import json
+import threading
+from http.client import HTTPConnection
+from http.server import ThreadingHTTPServer
+
 import pytest
 import torch
 
@@ -6,6 +10,7 @@ from model.config_v02 import ModelConfigV02
 from model.model_v02 import AstraCoreLMV02
 from model.serving_v02 import authorize_request, generate_response, is_loopback_host, load_approved_runtime
 from model.tokenizer import AstraTokenizer
+from scripts.serve_lm_v02 import build_handler
 
 
 def make_checkpoint(tmp_path):
@@ -81,6 +86,41 @@ def test_bearer_token_comparison_is_fail_closed():
     assert not authorize_request(token[:-1] + 'b', token)
     assert not authorize_request('', token)
     assert not authorize_request(token, '')
+
+
+
+def test_http_health_and_generation_require_bearer_token():
+    token = 'secure-test-token-' + ('x' * 32)
+    runtime = {
+        'model_version': 'astracorelm-v0.2',
+        'checkpoint_sha256': 'a' * 64,
+        'tokenizer_sha256': 'b' * 64,
+        'production_approved': False,
+    }
+    server = ThreadingHTTPServer(('127.0.0.1', 0), build_handler(runtime, token))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        conn = HTTPConnection('127.0.0.1', server.server_port, timeout=3)
+        conn.request('GET', '/health')
+        response = conn.getresponse()
+        assert response.status == 401
+        response.read()
+        conn.request('GET', '/health', headers={'Authorization': 'Bearer ' + token})
+        response = conn.getresponse()
+        assert response.status == 200
+        health = json.loads(response.read())
+        assert health['model_version'] == 'astracorelm-v0.2'
+        assert health['production_approved'] is False
+        conn.request('POST', '/v1/generate', body='{}', headers={'Authorization': 'Bearer wrong-token', 'Content-Length': '2'})
+        response = conn.getresponse()
+        assert response.status == 401
+        response.read()
+        conn.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
 def test_loopback_host_validation():
