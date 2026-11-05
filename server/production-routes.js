@@ -103,9 +103,9 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
   if (path.startsWith('/api/agents/') && path.endsWith('/cancel') && req.method === 'POST') {
     const runId = path.split('/')[3];
     if (!runId) return json(res, 400, { error: 'agent run id is required' });
-    const existing = await supabaseUserRequest(req, `/rest/v1/astracore_agent_runs?id=eq.${encodeURIComponent(runId)}&user_id=eq.${encodeURIComponent(user.id)}&select=id,finished_at,cancel_requested_at&limit=1`);
+    const existing = await supabaseUserRequest(req, `/rest/v1/astracore_agent_runs?id=eq.${encodeURIComponent(runId)}&user_id=eq.${encodeURIComponent(user.id)}&select=id,status,finished_at,cancel_requested_at&limit=1`);
     if (!existing[0]) return json(res, 404, { error: 'Agent run not found' });
-    if (existing[0].finished_at) return json(res, 409, { error: 'AGENT_RUN_ALREADY_FINISHED', agent_run_id: runId });
+    if (existing[0].finished_at || ['completed', 'failed', 'cancelled'].includes(existing[0].status)) return json(res, 409, { error: 'AGENT_RUN_ALREADY_FINISHED', agent_run_id: runId });
     if (existing[0].cancel_requested_at) return json(res, 202, { agent_run_id: runId, cancellation: 'already_requested' });
     const rows = await supabaseUserRequest(req, `/rest/v1/astracore_agent_runs?id=eq.${encodeURIComponent(runId)}&user_id=eq.${encodeURIComponent(user.id)}&finished_at=is.null`, {
       method: 'PATCH', headers: { Prefer: 'return=representation' },
@@ -156,7 +156,7 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
 
       const runPath = `/rest/v1/astracore_agent_runs?id=eq.${encodeURIComponent(runId)}&user_id=eq.${encodeURIComponent(user.id)}`;
       const persistProgress = async (state) => {
-        await supabaseUserRequest(req, runPath + '&finished_at=is.null', {
+        await supabaseUserRequest(req, runPath + '&finished_at=is.null&status=not.in.(completed,failed,cancelled)', {
           method: 'PATCH', headers: { Prefer: 'return=minimal' },
           body: JSON.stringify({ execution_state: state, heartbeat_at: isoNow() }),
         });
