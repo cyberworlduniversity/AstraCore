@@ -61,3 +61,49 @@ test('agent falls back to a no-tool plan when model planner output is malformed'
   assert.deepEqual(result.tools_executed, []);
   assert.equal(result.answer, 'A simple explanation.');
 });
+
+
+test('agent enforces one total tool-call budget across planning and review', async () => {
+  let calls = 0;
+  let searches = 0;
+  const result = await runAgentTask({
+    task: 'Search and calculate',
+    modelClient: { generate: async (prompt) => {
+      calls += 1;
+      if (calls === 1) return { text: JSON.stringify({ steps: ['Search'], tool_calls: [
+        { name: 'calculator', input: { expression: '1+1' } },
+        { name: 'calculator', input: { expression: '2+2' } },
+        { name: 'calculator', input: { expression: '3+3' } },
+      ] }) };
+      if (calls === 2) return { text: JSON.stringify({ complete: false, tool_calls: [
+        { name: 'calculator', input: { expression: '4+4' } },
+      ] }) };
+      return { text: 'Completed within the tool budget.' };
+    } },
+    knowledgeSearch: async () => { searches += 1; return []; },
+  });
+  assert.equal(calls, 3);
+  assert.equal(result.metrics.tool_calls_requested, 3);
+  assert.equal(result.tool_results.length, 3);
+  assert.equal(searches, 0);
+});
+
+test('knowledge-search adapter failures are recorded without crashing the agent', async () => {
+  let calls = 0;
+  const result = await runAgentTask({
+    task: 'Find my notes',
+    modelClient: { generate: async () => {
+      calls += 1;
+      if (calls === 1) return { text: JSON.stringify({ steps: ['Search notes'], tool_calls: [
+        { name: 'knowledge_search', input: { query: 'my notes' } },
+      ] }) };
+      if (calls === 2) return { text: JSON.stringify({ complete: true, reflection: 'Search failed; report the limitation.' }) };
+      return { text: 'I could not retrieve the notes because the knowledge search failed.' };
+    } },
+    knowledgeSearch: async () => { throw new Error('temporary search outage'); },
+  });
+  assert.equal(result.status, 'completed');
+  assert.equal(result.metrics.tool_calls_failed, 1);
+  assert.match(result.tool_results[0].error, /temporary search outage/);
+  assert.equal(result.metrics.duration_ms >= 0, true);
+});
