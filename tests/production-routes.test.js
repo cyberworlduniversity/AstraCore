@@ -217,3 +217,13 @@ test('finished agent runs cannot be cancelled', async () => {
   assert.equal(res.status, 409);
   assert.equal(res.body.error, 'AGENT_RUN_ALREADY_FINISHED');
 });
+
+
+test('legacy completed agent runs cannot be cancelled before finished_at was introduced', async () => {
+  const res = await route({
+    method: 'POST', path: '/api/agents/legacy-done/cancel',
+    request: async () => [{ id: 'legacy-done', status: 'completed', finished_at: null, cancel_requested_at: null }],
+  });
+  assert.equal(res.status, 409);
+  assert.equal(res.body.error, 'AGENT_RUN_ALREADY_FINISHED');
+});
