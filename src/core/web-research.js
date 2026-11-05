@@ -85,7 +85,8 @@ export async function runResearch(question, adapters = {}, options = {}) {
     return { status: 'not_implemented', plan, sources: [], rejected: [], answer: null };
   }
 
-  const resolveHost = options.resolveHost || lookup;\n  const fetchSafe = adapters.fetchSafe || createPinnedFetchAdapter(options.transportOptions);
+  const resolveHost = options.resolveHost || lookup;
+  const fetchSafe = adapters.fetchSafe || createPinnedFetchAdapter(options.transportOptions);
   const timeoutMs = Math.min(Math.max(Number(options.timeoutMs) || DEFAULT_TIMEOUT_MS, 1000), 30000);
   const searchResults = await adapters.search(plan.question, { limit: plan.maxSources });
   const candidates = Array.isArray(searchResults) ? searchResults.slice(0, plan.maxSources) : [];
