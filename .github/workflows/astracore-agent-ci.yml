@@ -6,6 +6,7 @@ on:
       - feat/agent-modules-audit-2026-11-05
     paths:
       - 'src/**'
+      - 'web/**'
       - 'server/**'
       - 'api/**'
       - 'tests/**'
@@ -19,6 +20,7 @@ on:
     branches: [main]
     paths:
       - 'src/**'
+      - 'web/**'
       - 'server/**'
       - 'api/**'
       - 'tests/**'
@@ -53,6 +55,7 @@ jobs:
           node --check server/server.js
           node --check server/auth.js
           node --check server/production-routes.js
+          node --check web/app.js
           node --check api/[...path].js
 
   python-tests:
