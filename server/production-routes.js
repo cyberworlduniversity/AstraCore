@@ -101,14 +101,18 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
   if (path === '/api/agents' && req.method === 'POST') {
     const body = bodyJson(await readBody(req, 64 * 1024));
     if (!body) return json(res, 400, { error: 'Invalid JSON' });
-    const task = clampText(body.task, 4000);
-    if (!task) return json(res, 400, { error: 'task is required' });
-    const requestedSteps = Array.isArray(body.steps) ? body.steps.slice(0, 8).map((step) => clampText(step, 500)).filter(Boolean) : [];
+    const { createAgentPlan } = await import('../src/agent/runtime.js');
+    let plan;
+    try {
+      plan = createAgentPlan({ task: body.task, steps: body.steps, agentType: body.agent_type });
+    } catch (error) {
+      return json(res, Number(error.status) || 400, { error: error.message });
+    }
     const rows = await supabaseUserRequest(req, '/rest/v1/astracore_agent_runs', {
       method: 'POST', headers: { Prefer: 'return=representation' },
-      body: JSON.stringify({ user_id: user.id, status: 'planned', task, metadata: { steps: requestedSteps, created_by: 'api', execution_gated: true } })
+      body: JSON.stringify({ user_id: user.id, agent_type: plan.agent_type, status: 'planned', plan, result: { execution: 'planned_only', tools_authorized: false } })
     });
-    return json(res, 202, { agent_run: rows[0] || null, execution: 'planned_only', message: 'Agent execution is gated until the selected tools are authorized and implemented.' });
+    return json(res, 202, { agent_run: rows[0] || null, execution: 'planned_only', tools_authorized: false, message: 'Plan saved. Tool execution remains disabled until adapters, sandboxing and approval checks are implemented.' });
   }
 
   return json(res, 404, { error: 'Production route not found' });
