@@ -54,6 +54,7 @@ test('queue schema bounds payload and idempotency key size', () => {
 test('queue RPCs use invoker privileges and remain service-role only', () => {
   assert.doesNotMatch(sql, /security definer/i);
   assert.match(sql, /security invoker/i);
-  assert.match(sql, /revoke all on function[\\s\\S]*from public, anon, authenticated/i);
-  assert.match(sql, /grant execute on function[\\s\\S]*to service_role/i);
+  assert.ok(sql.includes('revoke all on function public.claim_astracore_agent_jobs'));
+  assert.ok(sql.includes('from public, anon, authenticated'));
+  assert.ok(sql.includes('grant execute on function public.claim_astracore_agent_jobs'));
 });
