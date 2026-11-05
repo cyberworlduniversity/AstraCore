@@ -1,5 +1,6 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 
 process.env.ASTRACORE_SUPABASE_URL = 'https://astracore-test.supabase.co';
 process.env.ASTRACORE_SUPABASE_KEY = 'test-publishable-key';
@@ -57,6 +58,7 @@ test('OAuth code exchange validates state and exchanges the PKCE verifier with S
   assert.equal(request.url, 'https://astracore-test.supabase.co/auth/v1/token?grant_type=pkce');
   assert.equal(request.body.auth_code, 'one-time-auth-code');
   assert.match(request.body.code_verifier, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(new URL(flow.url).searchParams.get('code_challenge'), createHash('sha256').update(request.body.code_verifier).digest('base64url'));
   assert.equal(result.user.id, 'user-123');
   assert.equal(result.user.provider, 'github');
   assert.ok(result.token);
