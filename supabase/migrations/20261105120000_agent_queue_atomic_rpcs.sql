@@ -143,7 +143,7 @@ begin
      or octet_length(p_execution_state::text) > 8192 then
     raise exception 'execution state must be an object up to 8 KiB';
   end if;
-  if coalesce(p_result->>'status', '') not in ('completed', 'cancelled') then
+  if coalesce(p_result->>'status', '') not in ('completed', 'cancelled', 'already_finished') then
     raise exception 'unsupported final run status';
   end if;
 
@@ -159,9 +159,21 @@ begin
   from public.astracore_agent_runs
   where id = v_job.run_id and user_id = v_job.user_id
   for update;
-  if not found or v_run.finished_at is not null
-     or v_run.status not in ('running', 'cancelled') then
-    return 'run_not_active';
+  if not found then return 'run_not_active'; end if;
+  if v_run.finished_at is not null or v_run.status in ('completed', 'failed', 'blocked') then
+    update public.astracore_agent_jobs
+    set status = 'succeeded', lease_owner = null, lease_token = null, lease_expires_at = null,
+        heartbeat_at = now(), updated_at = now(), finished_at = now(), last_error = null
+    where id = v_job.id;
+    return 'already_finished';
+  end if;
+  if v_run.status not in ('running', 'cancelled') then return 'run_not_active'; end if;
+  if p_result->>'status' = 'already_finished' then
+    update public.astracore_agent_jobs
+    set status = 'succeeded', lease_owner = null, lease_token = null, lease_expires_at = null,
+        heartbeat_at = now(), updated_at = now(), finished_at = now(), last_error = null
+    where id = v_job.id;
+    return 'already_finished';
   end if;
 
   v_status := case
