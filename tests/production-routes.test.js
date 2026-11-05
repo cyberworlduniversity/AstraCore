@@ -159,7 +159,7 @@ test('agent execution persists a durable run and progress using only safe built-
       }
       if (options?.method === 'PATCH') {
         Object.assign(inserted, JSON.parse(options.body));
-        return [];
+        return requestPath.includes('cancel_requested_at=is.null') ? [inserted] : [];
       }
       if (requestPath.includes('cancel_requested_at=not.is.null')) return [];
       if (requestPath.includes('select=*&limit=1')) return [inserted];
