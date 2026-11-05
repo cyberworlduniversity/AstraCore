@@ -127,6 +127,16 @@ begin
   if not has_table_privilege('authenticated','public.astracore_agent_runs','SELECT') then
     raise exception 'authenticated role lost run SELECT';
   end if;
+  if has_table_privilege('authenticated','public.astracore_agent_runs','INSERT') then
+    raise exception 'authenticated role retained direct INSERT on agent runs';
+  end if;
+  if has_table_privilege('authenticated','public.astracore_agent_runs','DELETE') then
+    raise exception 'authenticated role retained direct DELETE on agent runs';
+  end if;
+  if has_table_privilege('anon','public.astracore_agent_runs','SELECT')
+     or has_table_privilege('anon','public.astracore_agent_runs','INSERT') then
+    raise exception 'anonymous role retained agent-run table privileges';
+  end if;
 
   raise notice 'AstraCore PostgreSQL queue integration checks passed';
 end $$;
