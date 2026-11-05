@@ -34,7 +34,7 @@ export function createAgentWorker({
     throw new Error('A valid workerId is required');
   }
   for (const [name, fn] of Object.entries({ claimJobs, heartbeatJob, readRun, persistProgress, executeTask, completeJob, failJob })) {
-    if (typeof fn !== 'function') throw new Error(\`Worker adapter \${name} is required\`);
+    if (typeof fn !== 'function') throw new Error('Worker adapter ' + name + ' is required');
   }
   if (!Number.isInteger(leaseSeconds) || leaseSeconds < 15 || leaseSeconds > 900) {
     throw new Error('leaseSeconds must be between 15 and 900');
