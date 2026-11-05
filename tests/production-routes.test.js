@@ -138,7 +138,7 @@ test('agent execution requires a model runtime and fails closed when unavailable
   assert.equal(res.body.error, 'AGENT_RUNTIME_NOT_READY');
 });
 
-test('agent execution uses approved model and only safe built-in tools', async () => {
+test('agent execution persists a durable run and progress using only safe built-in tools', async () => {
   let inserted = null;
   let calls = 0;
   const res = await route({
@@ -152,17 +152,68 @@ test('agent execution uses approved model and only safe built-in tools', async (
         : 'The result is 96.' }),
     },
     request: async (_req, requestPath, options) => {
-      assert.equal(requestPath, '/rest/v1/astracore_agent_runs');
-      inserted = JSON.parse(options.body);
-      return [{ id: 'run-2', ...inserted }];
+      assert.match(requestPath, /^\/rest\/v1\/astracore_agent_runs/);
+      if (options?.method === 'POST') {
+        inserted = { id: 'run-2', ...JSON.parse(options.body) };
+        return [inserted];
+      }
+      if (options?.method === 'PATCH') {
+        Object.assign(inserted, JSON.parse(options.body));
+        return [];
+      }
+      if (requestPath.includes('cancel_requested_at=not.is.null')) return [];
+      if (requestPath.includes('select=*&limit=1')) return [inserted];
+      return [];
     },
   });
-  assert.equal(res.status, 201);
+  assert.equal(res.status, 200);
   assert.equal(calls, 3);
   assert.equal(inserted.user_id, 'user-agent-2');
   assert.equal(inserted.status, 'completed');
   assert.equal(inserted.result.execution, 'completed');
   assert.deepEqual(inserted.result.tools_executed, ['calculator']);
   assert.equal(inserted.result.answer, 'The result is 96.');
+  assert.equal(inserted.execution_state.phase, 'completed');
+  assert.ok(inserted.started_at);
+  assert.ok(inserted.finished_at);
   assert.equal(res.body.execution_policy, 'allowlisted_read_only');
+});
+
+test('agent run detail is scoped to the authenticated owner', async () => {
+  let query = '';
+  const res = await route({
+    method: 'GET', path: '/api/agents/run-123', user: { id: 'owner-a' },
+    request: async (_req, requestPath) => { query = requestPath; return [{ id: 'run-123', user_id: 'owner-a', status: 'running' }]; },
+  });
+  assert.equal(res.status, 200);
+  assert.match(query, /id=eq\.run-123/);
+  assert.match(query, /user_id=eq\.owner-a/);
+  assert.equal(res.body.agent_run.status, 'running');
+});
+
+test('agent cancellation is owner-scoped and cooperative', async () => {
+  const calls = [];
+  const res = await route({
+    method: 'POST', path: '/api/agents/run-456/cancel', user: { id: 'owner-b' },
+    request: async (_req, requestPath, options) => {
+      calls.push({ requestPath, options });
+      if (!options) return [{ id: 'run-456', finished_at: null, cancel_requested_at: null }];
+      return [{ id: 'run-456', cancel_requested_at: '2026-11-05T10:00:00.000Z' }];
+    },
+  });
+  assert.equal(res.status, 202);
+  assert.equal(res.body.cancellation, 'requested');
+  assert.match(calls[0].requestPath, /user_id=eq\.owner-b/);
+  assert.match(calls[1].requestPath, /finished_at=is\.null/);
+  assert.equal(calls[1].options.method, 'PATCH');
+  assert.ok(calls[1].options.body.includes('cancel_requested_at'));
+});
+
+test('finished agent runs cannot be cancelled', async () => {
+  const res = await route({
+    method: 'POST', path: '/api/agents/run-done/cancel',
+    request: async () => [{ id: 'run-done', finished_at: '2026-11-05T10:00:00.000Z', cancel_requested_at: null }],
+  });
+  assert.equal(res.status, 409);
+  assert.equal(res.body.error, 'AGENT_RUN_ALREADY_FINISHED');
 });
