@@ -6,6 +6,12 @@ function clean(value, max = 500) {
   return redactSecrets(String(value ?? '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '').trim()).slice(0, max);
 }
 
+function completionOutcome(committed, fallback) {
+  if (committed === true) return fallback;
+  if (['completed', 'cancelled', 'already_finished'].includes(committed)) return committed;
+  return 'lease_lost';
+}
+
 function leaseLostError() {
   return Object.assign(new Error('The agent job lease is no longer owned by this worker.'), {
     code: 'AGENT_JOB_LEASE_LOST',
@@ -78,13 +84,13 @@ export function createAgentWorker({
         assertLease();
         completionAttempted = true;
         const committed = await completeJob({ job, result: { status: 'cancelled', reason: 'cancellation_requested' } });
-        return { job_id: job.id, outcome: committed === true ? 'cancelled' : 'lease_lost' };
+        return { job_id: job.id, outcome: completionOutcome(committed, 'cancelled') };
       }
       if (TERMINAL_RUN_STATES.has(run.status) || run.finished_at) {
         assertLease();
         completionAttempted = true;
         const committed = await completeJob({ job, result: { status: 'already_finished' } });
-        return { job_id: job.id, outcome: committed === true ? 'already_finished' : 'lease_lost' };
+        return { job_id: job.id, outcome: completionOutcome(committed, 'already_finished') };
       }
       if (run.status !== 'running') {
         throw Object.assign(new Error('The agent run is not in the running state.'), { code: 'AGENT_RUN_NOT_RUNNING', status: 409 });
@@ -119,7 +125,7 @@ export function createAgentWorker({
       assertLease();
       completionAttempted = true;
       const committed = await completeJob({ job, result: { status: 'completed', execution } });
-      return { job_id: job.id, outcome: committed === true ? 'completed' : 'lease_lost' };
+      return { job_id: job.id, outcome: completionOutcome(committed, 'completed') };
     } catch (error) {
       await heartbeatInFlight;
       if (leaseLost || error?.code === 'AGENT_JOB_LEASE_LOST') {
