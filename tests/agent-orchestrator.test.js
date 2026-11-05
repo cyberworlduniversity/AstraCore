@@ -37,7 +37,7 @@ test('agent plans with the model and executes only allowlisted read-only tools',
     modelClient,
     knowledgeSearch: async (query) => { searchQuery = query; return [{ title: 'Network notes', content: 'Firewall and segmentation.' }]; },
   });
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
   assert.equal(searchQuery, 'network security notes');
   assert.equal(result.status, 'completed');
   assert.equal(result.execution_policy, 'allowlisted_read_only');
