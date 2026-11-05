@@ -5,7 +5,7 @@ import { generate } from '../src/ai/inference.js';
 import { createAstraCoreLMClient } from '../src/ai/astracore-lm-client.js';
 import { ASTRA_CAPABILITIES, capabilityManifest } from '../src/core/capabilities.js';
 import { KnowledgeRouter } from '../src/core/knowledge.js';
-import { currentUser,isAdmin,signup,login,oauthStart,exchangeOAuthCode,clearOAuthCookie,listUsers,sessionCookie,clearSessionCookie,ADMIN_EMAIL,supabaseUserRequest } from '../server/auth.js';
+import { currentUser,isAdmin,signup,login,oauthStart,exchangeOAuthCode,clearOAuthCookie,listUsers,sessionCookie,clearSessionCookie,ADMIN_EMAIL,supabaseUserRequest,supabaseServiceRequest } from '../server/auth.js';
 import { knowledgeRoute } from '../server/knowledge-api.js';
 import { createEmbeddingService } from '../server/embedding-service.js';
 import { selectRelevantMemories, buildMemoryContext } from '../src/core/memory-system.js';
@@ -52,7 +52,7 @@ if(req.method==='GET'&&url.pathname.startsWith('/api/auth/google/callback'))retu
 if(req.method==='GET'&&url.pathname.startsWith('/api/auth/github/callback'))return redirect(res,'/?auth_error=github_oauth_not_configured');
 
 if(url.pathname.startsWith('/api/knowledge')){const user=await requireUser(req,res);if(!user)return;return await knowledgeRoute({req,res,url,user,readBody,json,supabaseUserRequest})}
-if(url.pathname.startsWith('/api/memory')||url.pathname.startsWith('/api/tools')||url.pathname.startsWith('/api/models')||url.pathname.startsWith('/api/evaluation')||url.pathname.startsWith('/api/agents')){const user=await requireUser(req,res);if(!user)return;return await handleProductionRoute({req,res,url,user,readBody,json,supabaseUserRequest,modelClient:remoteLmClient,knowledgeSearch:(query)=>retrieveKnowledge(req,query)})}
+if(url.pathname.startsWith('/api/memory')||url.pathname.startsWith('/api/tools')||url.pathname.startsWith('/api/models')||url.pathname.startsWith('/api/evaluation')||url.pathname.startsWith('/api/agents')){const user=await requireUser(req,res);if(!user)return;return await handleProductionRoute({req,res,url,user,readBody,json,supabaseUserRequest,supabaseServiceRequest,modelClient:remoteLmClient,knowledgeSearch:(query)=>retrieveKnowledge(req,query)})}
 if(url.pathname.startsWith('/api/projects')||url.pathname.startsWith('/api/files')){const user=await requireUser(req,res);if(!user)return;return await cloudRoute({req,res,url,user,readBody,json,supabaseUserRequest})}
 if(url.pathname==='/api/system/status'||url.pathname==='/api/search'){const user=await requireUser(req,res);if(!user)return;const handled=await systemRoute({req,res,url,user,json,supabaseUserRequest,capabilityCount:ASTRA_CAPABILITIES.length,modelDetails:modelDetails()});if(handled)return}
 if(req.method==='GET'&&url.pathname==='/api/llm/status'){if(!await requireUser(req,res))return;const status=await refreshRemoteLm();return json(res,200,{module:'AstraCoreLM',version:'0.2.0',runtime:'Python / PyTorch',training_workflow:'GitHub Actions · Step 5',checkpoint_configured:Boolean(process.env.ASTRACORE_LM_CHECKPOINT),runtime_configured:Boolean(remoteLmClient),production_ready:status.ready===true&&status.production_approved===true,production_gate:status.ready===true?'OPEN':'CLOSED',runtime_status:status.reason||'verified',configuration_error:lmConfigError,note:'Production serving opens only after the remote service confirms the approved checkpoint hash.'})}
