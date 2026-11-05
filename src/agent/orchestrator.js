@@ -127,10 +127,11 @@ export async function runAgentTask({ task, agentType = 'general', modelClient, k
       } catch (error) {
         toolResults.push({ tool: 'calculator', input: { expression }, error: clamp(error.message, 180) });
       }
-    } else if (call.name === 'knowledge_search' && typeof knowledgeSearch === 'function') {
+    } else if (call.name === 'knowledge_search') {
       const query = clamp(call.input?.query, 400);
       if (!query) continue;
       try {
+        if (typeof knowledgeSearch !== 'function') throw new Error('Knowledge search adapter is unavailable');
         const rows = await knowledgeSearch(query);
         const safeRows = (Array.isArray(rows) ? rows : []).slice(0, 5).map((row) => ({
           title: clamp(row.title || row.source || 'Knowledge item', 200),
@@ -168,10 +169,11 @@ export async function runAgentTask({ task, agentType = 'general', modelClient, k
       } catch (error) {
         toolResults.push({ tool: 'calculator', input: { expression }, error: clamp(error.message, 180) });
       }
-    } else if (call.name === 'knowledge_search' && typeof knowledgeSearch === 'function') {
+    } else if (call.name === 'knowledge_search') {
       const query = clamp(call.input?.query, 400);
       if (!query) continue;
       try {
+        if (typeof knowledgeSearch !== 'function') throw new Error('Knowledge search adapter is unavailable');
         const rows = await knowledgeSearch(query);
         toolResults.push({ tool: 'knowledge_search', input: { query }, output: (Array.isArray(rows) ? rows : []).slice(0, 5).map((row) => ({
           title: clamp(row.title || row.source || 'Knowledge item', 200),
