@@ -54,3 +54,48 @@ test('production gate passes only when every release condition is met', () => {
   assert.equal(result.ready, true);
   assert.deepEqual(result.blockers, []);
 });
+
+
+test('production gate rejects malformed checkpoint and tokenizer hashes', () => {
+  const result = evaluateProductionReadiness({
+    model: {
+      status: 'ready',
+      checkpoint_path: 'models/astracorelm-v0.1/model.pt',
+      production_ready: true,
+      checkpoint_sha256: 'not-a-sha256',
+      tokenizer_sha256: 'f'.repeat(63),
+      model_version: 'astracorelm-v0.1',
+      evaluation_id: 'eval-20261030-001',
+    },
+    embedding: { status: 'ready' },
+    evaluation: { status: 'passed' },
+    capabilities,
+    security,
+  });
+  assert.equal(result.ready, false);
+  assert.ok(result.blockers.includes('language_model:checkpoint_checksum_invalid'));
+  assert.ok(result.blockers.includes('language_model:tokenizer_checksum_invalid'));
+});
+
+test('production gate rejects invalid and expired approval timestamps', () => {
+  for (const expires_at of ['not-a-date', '2000-01-01T00:00:00.000Z']) {
+    const result = evaluateProductionReadiness({
+      model: {
+        status: 'ready',
+        checkpoint_path: 'models/astracorelm-v0.1/model.pt',
+        production_ready: true,
+        checkpoint_sha256: 'a'.repeat(64),
+        tokenizer_sha256: 'b'.repeat(64),
+        model_version: 'astracorelm-v0.1',
+        evaluation_id: 'eval-20261030-001',
+        expires_at,
+      },
+      embedding: { status: 'ready' },
+      evaluation: { status: 'passed' },
+      capabilities,
+      security,
+    });
+    assert.equal(result.ready, false);
+    assert.ok(result.blockers.includes('language_model:expired_or_invalid_expiry'));
+  }
+});
