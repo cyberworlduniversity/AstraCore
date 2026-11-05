@@ -23,8 +23,10 @@ The endpoint requires an authenticated session and a remote AstraCoreLM v0.2 run
 2. Ask the approved AstraCoreLM runtime for a constrained JSON plan.
 3. Validate the proposed tool calls against a hard-coded allowlist.
 4. Execute at most three safe built-in tool calls.
-5. Pass bounded, untrusted tool results back to the model.
-6. Generate a bounded final answer and persist the run to `astracore_agent_runs`.
+5. Persist bounded progress snapshots and heartbeat timestamps to `astracore_agent_runs`.
+6. Check for a user cancellation request between model/tool phases and stop at the next safe checkpoint.
+7. Pass bounded, untrusted tool results back to the model.
+8. Generate a bounded final answer and persist the terminal result.
 
 ## Available tools
 
@@ -50,3 +52,13 @@ The remote service must independently report `production_approved: true` and the
 ## Vercel note
 
 The Vercel serverless API and the standalone Node server are separate entry points. Both now use the same approved remote AstraCoreLM client contract. Vercel cannot host the PyTorch model process as part of this Node serverless handler; the Python model service needs dedicated compute and a private HTTPS endpoint.
+
+
+## Durable run inspection and cancellation
+
+- `GET /api/agents/:runId` returns a run only when it belongs to the authenticated user.
+- `POST /api/agents/:runId/cancel` records a cancellation request only for an unfinished run owned by the authenticated user.
+- `execution_state` stores a small phase/progress snapshot; `heartbeat_at`, `started_at`, and `finished_at` support operational inspection.
+- Cancellation is cooperative: the running worker checks the durable request between model/tool phases. It cannot interrupt a model provider call already in progress; it stops at the next checkpoint.
+- The additive migration `20261105090000_add_durable_agent_run_state.sql` adds the state and cancellation columns. Apply it through the project's reviewed Supabase migration process before deploying this API revision.
+- A worker crash can leave a run without `finished_at`; production operations still need a stale-run reconciler/lease policy before treating every active record as live.
