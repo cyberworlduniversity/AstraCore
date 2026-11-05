@@ -23,7 +23,7 @@ Retryable failures use bounded exponential backoff (5 seconds, doubling to a 300
 - The atomic migration revokes direct `INSERT`, `UPDATE`, and `DELETE` on `astracore_agent_runs` from client roles while retaining owner-scoped reads. Plan creation and cancellation use service-role RPCs.
 - Admin control treats run status as read-only; execution state is controlled by the queue/worker.
 - All queue and run-mutation RPCs are revoked from public/client roles and granted only to `service_role`.
-- The service-role key must remain server-side and must never be sent to a browser or mobile client.
+- Configure `ASTRACORE_SUPABASE_SERVICE_ROLE_KEY` (or `SUPABASE_SERVICE_ROLE_KEY`) only in the server/worker environment. The service-role key must never be sent to a browser or mobile client.
 - Payloads should contain only bounded, validated task input and references, not secrets, raw credentials, or full conversation histories.
 - The idempotency key is unique per user when supplied; callers should reuse it for retrying the same enqueue request.
 - The authenticated API creates a run and queue job atomically using `create_astracore_agent_run_and_enqueue`. The caller's verified session supplies the user ID; the server-only service-role client calls the RPC. Request idempotency keys are bounded to 128 characters.
