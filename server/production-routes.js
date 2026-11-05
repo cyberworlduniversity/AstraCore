@@ -92,6 +92,29 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
     return json(res, 200, { evaluations: rows });
   }
 
+  if (path.startsWith('/api/agents/') && req.method === 'GET' && !path.endsWith('/cancel')) {
+    const runId = path.split('/')[3];
+    if (!runId) return json(res, 400, { error: 'agent run id is required' });
+    const rows = await supabaseUserRequest(req, `/rest/v1/astracore_agent_runs?id=eq.${encodeURIComponent(runId)}&user_id=eq.${encodeURIComponent(user.id)}&select=*&limit=1`);
+    if (!rows[0]) return json(res, 404, { error: 'Agent run not found' });
+    return json(res, 200, { agent_run: rows[0] });
+  }
+
+  if (path.startsWith('/api/agents/') && path.endsWith('/cancel') && req.method === 'POST') {
+    const runId = path.split('/')[3];
+    if (!runId) return json(res, 400, { error: 'agent run id is required' });
+    const existing = await supabaseUserRequest(req, `/rest/v1/astracore_agent_runs?id=eq.${encodeURIComponent(runId)}&user_id=eq.${encodeURIComponent(user.id)}&select=id,finished_at,cancel_requested_at&limit=1`);
+    if (!existing[0]) return json(res, 404, { error: 'Agent run not found' });
+    if (existing[0].finished_at) return json(res, 409, { error: 'AGENT_RUN_ALREADY_FINISHED', agent_run_id: runId });
+    if (existing[0].cancel_requested_at) return json(res, 202, { agent_run_id: runId, cancellation: 'already_requested' });
+    const rows = await supabaseUserRequest(req, `/rest/v1/astracore_agent_runs?id=eq.${encodeURIComponent(runId)}&user_id=eq.${encodeURIComponent(user.id)}&finished_at=is.null`, {
+      method: 'PATCH', headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({ cancel_requested_at: isoNow(), heartbeat_at: isoNow() }),
+    });
+    if (!rows[0]) return json(res, 409, { error: 'AGENT_RUN_ALREADY_FINISHED', agent_run_id: runId });
+    return json(res, 202, { agent_run_id: runId, cancellation: 'requested' });
+  }
+
   if (path === '/api/agents' && req.method === 'GET') {
     const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 20, 1), 50);
     const rows = await supabaseUserRequest(req, `/rest/v1/astracore_agent_runs?select=*&user_id=eq.${encodeURIComponent(user.id)}&order=created_at.desc&limit=${limit}`);
@@ -105,41 +128,105 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
       if (!modelClient || typeof modelClient.generate !== 'function') {
         return json(res, 503, { error: 'AGENT_RUNTIME_NOT_READY', message: 'Agent execution requires an approved AstraCoreLM runtime.' });
       }
+      const { createAgentPlan } = await import('../src/agent/runtime.js');
+      let initialPlan;
+      try {
+        initialPlan = createAgentPlan({ task: body.task, steps: body.steps, agentType: body.agent_type });
+      } catch (error) {
+        return json(res, Number(error.status) || 400, { error: error.message });
+      }
+      const startedAt = isoNow();
+      const created = await supabaseUserRequest(req, '/rest/v1/astracore_agent_runs', {
+        method: 'POST', headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({
+          user_id: user.id,
+          agent_type: initialPlan.agent_type,
+          status: 'running',
+          plan: initialPlan,
+          result: { execution: 'running' },
+          execution_state: { phase: 'queued', steps_completed: 0, tool_calls_completed: 0 },
+          started_at: startedAt,
+          heartbeat_at: startedAt,
+          finished_at: null,
+          cancel_requested_at: null,
+        }),
+      });
+      const runId = created[0]?.id;
+      if (!runId) return json(res, 502, { error: 'AGENT_RUN_PERSISTENCE_FAILED', message: 'The run could not be assigned a durable ID.' });
+
+      const runPath = `/rest/v1/astracore_agent_runs?id=eq.${encodeURIComponent(runId)}&user_id=eq.${encodeURIComponent(user.id)}`;
+      const persistProgress = async (state) => {
+        await supabaseUserRequest(req, runPath + '&finished_at=is.null', {
+          method: 'PATCH', headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({ execution_state: state, heartbeat_at: isoNow() }),
+        });
+      };
+      const isCancelled = async () => {
+        const rows = await supabaseUserRequest(req, runPath + '&cancel_requested_at=not.is.null&select=id&limit=1');
+        return rows.length > 0;
+      };
+
       const { runAgentTask } = await import('../src/agent/orchestrator.js');
       let execution;
       try {
         execution = await runAgentTask({
-          task: body.task,
-          agentType: body.agent_type,
+          task: initialPlan.task,
+          agentType: initialPlan.agent_type,
           modelClient,
           knowledgeSearch,
+          onProgress: persistProgress,
+          isCancelled,
         });
       } catch (error) {
-        return json(res, Number(error.status) || 503, { error: 'AGENT_EXECUTION_FAILED', message: error.message });
+        const cancelled = error.code === 'AGENT_RUN_CANCELLED';
+        const finishedAt = isoNow();
+        const safeMessage = clampText(error.message || 'Agent execution failed', 500);
+        await supabaseUserRequest(req, runPath + '&finished_at=is.null', {
+          method: 'PATCH', headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({
+            status: cancelled ? 'cancelled' : 'failed',
+            result: { execution: cancelled ? 'cancelled' : 'failed' },
+            execution_state: { phase: cancelled ? 'cancelled' : 'failed', error: cancelled ? null : safeMessage },
+            last_error: cancelled ? null : safeMessage,
+            heartbeat_at: finishedAt,
+            finished_at: finishedAt,
+          }),
+        });
+        return json(res, cancelled ? 409 : (Number(error.status) || 503), {
+          error: cancelled ? 'AGENT_RUN_CANCELLED' : 'AGENT_EXECUTION_FAILED',
+          agent_run_id: runId,
+          message: cancelled ? 'The agent run was cancelled.' : safeMessage,
+        });
       }
+
       const { evaluateAgentRun } = await import('../src/agent/evaluation.js');
-      const evaluation = evaluateAgentRun({ task: body.task, answer: execution.answer, toolResults: execution.tool_results, metrics: execution.metrics || {} });
-      const rows = await supabaseUserRequest(req, '/rest/v1/astracore_agent_runs', {
-        method: 'POST', headers: { Prefer: 'return=representation' },
+      const evaluation = evaluateAgentRun({ task: initialPlan.task, answer: execution.answer, toolResults: execution.tool_results, metrics: execution.metrics || {} });
+      const finishedAt = isoNow();
+      const finalResult = {
+        execution: 'completed',
+        answer: execution.answer,
+        tools_executed: execution.tools_executed,
+        tool_results: execution.tool_results,
+        execution_policy: execution.execution_policy,
+        evaluation,
+        metrics: execution.metrics || {},
+        reflection: execution.reflection || null,
+      };
+      await supabaseUserRequest(req, runPath + '&finished_at=is.null', {
+        method: 'PATCH', headers: { Prefer: 'return=minimal' },
         body: JSON.stringify({
-          user_id: user.id,
-          agent_type: execution.plan.agent_type,
           status: 'completed',
           plan: execution.plan,
-          result: {
-            execution: 'completed',
-            answer: execution.answer,
-            tools_executed: execution.tools_executed,
-            tool_results: execution.tool_results,
-            execution_policy: execution.execution_policy,
-            evaluation,
-            metrics: execution.metrics || {},
-            reflection: execution.reflection || null,
-          },
-        })
+          result: finalResult,
+          execution_state: { phase: 'completed', steps_completed: execution.plan.steps.length, tool_calls_completed: execution.tool_results.length },
+          heartbeat_at: finishedAt,
+          finished_at: finishedAt,
+          last_error: null,
+        }),
       });
-      return json(res, 201, {
-        agent_run: rows[0] || null,
+      const refreshed = await supabaseUserRequest(req, runPath + '&select=*&limit=1');
+      return json(res, 200, {
+        agent_run: refreshed[0] || { id: runId, status: 'completed', result: finalResult },
         execution: 'completed',
         answer: execution.answer,
         plan: execution.plan,
