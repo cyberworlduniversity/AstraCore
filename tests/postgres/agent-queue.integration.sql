@@ -14,6 +14,75 @@ $$;
 
 \ir ../../supabase/migrations/20261105130000_harden_admin_rls_helper.sql
 
+-- Minimal disposable fixtures for the duplicate-admin-policy migration test.
+create table public.astracore_lm_training_runs (id uuid primary key);
+create table public.astracore_model_versions (id uuid primary key);
+create table public.astracore_model_registry (id uuid primary key);
+
+create policy admin_training_control on public.astracore_lm_training_runs
+  for all to authenticated
+  using ((select public.astracore_is_admin()))
+  with check ((select public.astracore_is_admin()));
+create policy training_runs_admin_insert on public.astracore_lm_training_runs
+  for insert to authenticated
+  with check (lower(coalesce((select auth.jwt())->>'email','')) = 'ehemanathan143@gmail.com');
+create policy training_runs_admin_select on public.astracore_lm_training_runs
+  for select to authenticated
+  using (lower(coalesce((select auth.jwt())->>'email','')) = 'ehemanathan143@gmail.com');
+create policy training_runs_admin_update on public.astracore_lm_training_runs
+  for update to authenticated
+  using (lower(coalesce((select auth.jwt())->>'email','')) = 'ehemanathan143@gmail.com')
+  with check (lower(coalesce((select auth.jwt())->>'email','')) = 'ehemanathan143@gmail.com');
+
+create policy admin_model_versions_control on public.astracore_model_versions
+  for all to authenticated
+  using ((select public.astracore_is_admin()))
+  with check ((select public.astracore_is_admin()));
+create policy model_versions_admin_delete on public.astracore_model_versions
+  for delete to authenticated
+  using (lower(coalesce((select auth.jwt())->>'email','')) = 'ehemanathan143@gmail.com');
+create policy model_versions_admin_insert on public.astracore_model_versions
+  for insert to authenticated
+  with check (lower(coalesce((select auth.jwt())->>'email','')) = 'ehemanathan143@gmail.com');
+create policy model_versions_admin_read on public.astracore_model_versions
+  for select to authenticated
+  using (lower(coalesce((select auth.jwt())->>'email','')) = 'ehemanathan143@gmail.com');
+create policy model_versions_admin_update on public.astracore_model_versions
+  for update to authenticated
+  using (lower(coalesce((select auth.jwt())->>'email','')) = 'ehemanathan143@gmail.com')
+  with check (lower(coalesce((select auth.jwt())->>'email','')) = 'ehemanathan143@gmail.com');
+
+create policy admin_model_registry_control on public.astracore_model_registry
+  for all to authenticated
+  using ((select public.astracore_is_admin()))
+  with check ((select public.astracore_is_admin()));
+create policy astracore_models_admin on public.astracore_model_registry
+  for select to authenticated
+  using ((select public.astracore_is_admin()));
+
+\ir ../../supabase/migrations/20261105140000_remove_duplicate_admin_rls_policies.sql
+
+do $
+begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname='public'
+      and policyname in (
+        'training_runs_admin_insert','training_runs_admin_select','training_runs_admin_update',
+        'model_versions_admin_delete','model_versions_admin_insert','model_versions_admin_read','model_versions_admin_update',
+        'astracore_models_admin'
+      )
+  ) then
+    raise exception 'duplicate legacy admin policies were not removed';
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and policyname='admin_training_control')
+     or not exists (select 1 from pg_policies where schemaname='public' and policyname='admin_model_versions_control')
+     or not exists (select 1 from pg_policies where schemaname='public' and policyname='admin_model_registry_control') then
+    raise exception 'canonical admin policies were unexpectedly removed';
+  end if;
+end;
+$;
+
 create table public.astracore_agent_runs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
