@@ -132,8 +132,7 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
   if (path === '/api/agents' && req.method === 'POST') {
     const body = bodyJson(await readBody(req, 64 * 1024));
     if (!body) return json(res, 400, { error: 'Invalid JSON' });
-    if (body.execute === true) {
-      const { createAgentPlan } = await import('../src/agent/runtime.js');
+    const { createAgentPlan } = await import('../src/agent/runtime.js');
     let plan;
     try {
       plan = createAgentPlan({ task: body.task, steps: body.steps, agentType: body.agent_type });
@@ -143,6 +142,49 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
     if (typeof supabaseServiceRequest !== 'function') {
       return json(res, 503, { error: 'AGENT_QUEUE_NOT_CONFIGURED', message: 'The private run-control service is not configured.' });
     }
+
+    if (body.execute === true) {
+      const rawIdempotencyKey = req.headers?.['idempotency-key'] || body.idempotency_key || randomUUID();
+      const idempotencyKey = String(rawIdempotencyKey).trim();
+      if (!idempotencyKey || idempotencyKey.length > 128) {
+        return json(res, 400, { error: 'INVALID_IDEMPOTENCY_KEY', message: 'Idempotency keys must contain 1 to 128 characters.' });
+      }
+      const maxAttempts = body.max_attempts === undefined ? 3 : Number(body.max_attempts);
+      if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 10) {
+        return json(res, 400, { error: 'INVALID_MAX_ATTEMPTS', message: 'max_attempts must be between 1 and 10.' });
+      }
+      let created;
+      try {
+        const rows = await supabaseServiceRequest('/rest/v1/rpc/create_astracore_agent_run_and_enqueue', {
+          method: 'POST',
+          headers: { Prefer: 'return=representation' },
+          body: JSON.stringify({
+            p_user_id: user.id,
+            p_agent_type: plan.agent_type,
+            p_plan: plan,
+            p_idempotency_key: idempotencyKey,
+            p_max_attempts: maxAttempts,
+          }),
+        });
+        created = Array.isArray(rows) ? rows[0] : rows;
+      } catch (error) {
+        return json(res, Number(error.status) === 400 ? 400 : 503, {
+          error: 'AGENT_QUEUE_ENQUEUE_FAILED',
+          message: 'The private agent queue could not accept this request. No synchronous fallback was attempted.',
+        });
+      }
+      if (!created?.run_id || !created?.job_id) {
+        return json(res, 502, { error: 'AGENT_QUEUE_CONTRACT_INVALID', message: 'The queue service did not return durable run and job identifiers.' });
+      }
+      return json(res, 202, {
+        agent_run: { id: created.run_id, status: created.run_status || 'running', agent_type: plan.agent_type, plan },
+        job: { id: created.job_id, status: created.job_status || 'queued' },
+        execution: 'queued',
+        idempotent_replay: created.created === false,
+        message: 'Agent run accepted. A private worker must claim the queued job before execution begins.',
+      });
+    }
+
     let rows;
     try {
       rows = await supabaseServiceRequest('/rest/v1/rpc/create_astracore_agent_plan', {
@@ -154,7 +196,12 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
     }
     const saved = Array.isArray(rows) ? rows[0] : rows;
     if (!saved?.id) return json(res, 502, { error: 'AGENT_PLAN_CONTRACT_INVALID' });
-    return json(res, 202, { agent_run: saved, execution: 'planned_only', tools_authorized: false, message: 'Plan saved. Tool execution remains disabled until a private worker and approved runtime are available.' });
+    return json(res, 202, {
+      agent_run: saved,
+      execution: 'planned_only',
+      tools_authorized: false,
+      message: 'Plan saved. Tool execution remains disabled until a private worker and approved runtime are available.',
+    });
   }
 
   return json(res, 404, { error: 'Production route not found' });
