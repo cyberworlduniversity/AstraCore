@@ -107,7 +107,7 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
     if (!existing[0]) return json(res, 404, { error: 'Agent run not found' });
     if (existing[0].finished_at || ['completed', 'failed', 'cancelled'].includes(existing[0].status)) return json(res, 409, { error: 'AGENT_RUN_ALREADY_FINISHED', agent_run_id: runId });
     if (existing[0].cancel_requested_at) return json(res, 202, { agent_run_id: runId, cancellation: 'already_requested' });
-    const rows = await supabaseUserRequest(req, `/rest/v1/astracore_agent_runs?id=eq.${encodeURIComponent(runId)}&user_id=eq.${encodeURIComponent(user.id)}&finished_at=is.null`, {
+    const rows = await supabaseUserRequest(req, `/rest/v1/astracore_agent_runs?id=eq.${encodeURIComponent(runId)}&user_id=eq.${encodeURIComponent(user.id)}&finished_at=is.null&status=not.in.(completed,failed,cancelled)`, {
       method: 'PATCH', headers: { Prefer: 'return=representation' },
       body: JSON.stringify({ cancel_requested_at: isoNow(), heartbeat_at: isoNow() }),
     });
