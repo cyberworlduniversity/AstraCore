@@ -247,3 +247,22 @@ test('legacy completed agent runs cannot be cancelled before finished_at was int
   assert.equal(res.status, 409);
   assert.equal(res.body.error, 'AGENT_RUN_ALREADY_FINISHED');
 });
+
+
+test('agent execute reports missing server-only service-role configuration clearly', async () => {
+  const res = await route({
+    method: 'POST',
+    path: '/api/agents',
+    user: { id: 'authenticated-user-9' },
+    body: JSON.stringify({ task: 'Run my research task', execute: true }),
+    serviceRequest: async () => {
+      throw Object.assign(new Error('Server-side Supabase service role is not configured.'), {
+        status: 503,
+        code: 'SUPABASE_SERVICE_ROLE_NOT_CONFIGURED',
+      });
+    },
+  });
+  assert.equal(res.status, 503);
+  assert.equal(res.body.error, 'AGENT_QUEUE_NOT_CONFIGURED');
+  assert.match(res.body.message, /ASTRACORE_SUPABASE_SERVICE_ROLE_KEY/);
+});
