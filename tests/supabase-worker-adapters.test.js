@@ -13,7 +13,7 @@ function fixture() {
     const path = new URL(url).pathname;
     if (path.endsWith('/claim_astracore_agent_jobs')) return response([{ id: 'job-1' }]);
     if (path.endsWith('/heartbeat_astracore_agent_job')) return response(true);
-    if (path.includes('/astracore_agent_runs?')) return response([{ id: 'run-1', user_id: 'user-1' }]);
+    if (path.endsWith('/astracore_agent_runs')) return response([{ id: 'run-1', user_id: 'user-1' }]);
     if (path.endsWith('/persist_astracore_agent_run_progress')) return response(true);
     if (path.endsWith('/finalize_astracore_agent_job')) return response('completed');
     if (path.endsWith('/fail_astracore_agent_job')) return response('queued');
