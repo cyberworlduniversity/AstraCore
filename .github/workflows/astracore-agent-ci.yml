@@ -32,9 +32,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: astracore-agent-ci-${{ github.ref }}
-  cancel-in-progress: false
 
 jobs:
   node-tests:
