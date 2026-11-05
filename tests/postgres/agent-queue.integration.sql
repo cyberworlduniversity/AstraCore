@@ -129,6 +129,6 @@ begin
   end if;
 
   raise notice 'AstraCore PostgreSQL queue integration checks passed';
-end $;
+end $$;
 
-\\ir agent-worker-lifecycle.integration.sql
+\ir agent-worker-lifecycle.integration.sql
