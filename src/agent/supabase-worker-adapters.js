@@ -7,6 +7,9 @@ function validateBaseUrl(value) {
   if (parsed.protocol !== 'https:' && !(loopback && parsed.protocol === 'http:')) {
     throw new Error('The worker requires HTTPS for remote Supabase connections');
   }
+  if (parsed.username || parsed.password || parsed.search || parsed.hash || (parsed.pathname !== '/' && parsed.pathname !== '')) {
+    throw new Error('Supabase URL must be an origin without credentials, path, query, or fragment');
+  }
   return parsed.origin;
 }
 
@@ -14,34 +17,43 @@ export function createSupabaseAgentWorkerAdapters({
   supabaseUrl,
   serviceRoleKey,
   fetchImpl = globalThis.fetch,
+  timeoutMs = 10_000,
 } = {}) {
   const baseUrl = validateBaseUrl(supabaseUrl);
   if (typeof serviceRoleKey !== 'string' || serviceRoleKey.length < 32) {
     throw new Error('A server-only Supabase service-role key is required');
   }
   if (typeof fetchImpl !== 'function') throw new Error('A fetch implementation is required');
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 60_000) throw new Error('timeoutMs must be between 1000 and 60000');
 
   async function request(path, { method = 'GET', body, headers = {} } = {}) {
-    const response = await fetchImpl(baseUrl + path, {
-      method,
-      headers: {
-        apikey: serviceRoleKey,
-        Authorization: 'Bearer ' + serviceRoleKey,
-        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-        ...headers,
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-    const text = await response.text();
-    let data = null;
-    try { data = text ? JSON.parse(text) : null; } catch { data = null; }
-    if (!response.ok) {
-      throw Object.assign(new Error('Supabase worker request failed with HTTP ' + response.status), {
-        status: response.status,
-        code: 'SUPABASE_WORKER_REQUEST_FAILED',
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetchImpl(baseUrl + path, {
+        method,
+        headers: {
+          apikey: serviceRoleKey,
+          Authorization: 'Bearer ' + serviceRoleKey,
+          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+          ...headers,
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        signal: controller.signal,
       });
+      const text = await response.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+      if (!response.ok) {
+        throw Object.assign(new Error('Supabase worker request failed with HTTP ' + response.status), {
+          status: response.status,
+          code: 'SUPABASE_WORKER_REQUEST_FAILED',
+        });
+      }
+      return data;
+    } finally {
+      clearTimeout(timer);
     }
-    return data;
   }
 
   const rpc = (name, args) => request('/rest/v1/rpc/' + name, { method: 'POST', body: args });
