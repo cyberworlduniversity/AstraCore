@@ -44,9 +44,11 @@ test('finalization persists run result and queue success in one RPC transaction'
 test('dead-letter failure updates the associated run to a terminal state', () => {
   const start = sql.indexOf('create or replace function public.fail_astracore_agent_job');
   const body = sql.slice(start);
-  assert.match(body, /when v_next_status = 'dead_letter' then 'failed'/i);
+  assert.match(body, /set status = case when cancel_requested_at is not null then 'cancelled' else 'failed' end/i);
   assert.match(body, /update public\.astracore_agent_runs/i);
   assert.match(body, /finished_at = now\(\)/i);
+  assert.match(sql, /create or replace function public\.dead_letter_exhausted_astracore_agent_jobs/i);
+  assert.match(sql, /Worker lease expired after maximum attempts/i);
 });
 
 test('all atomic queue RPCs are restricted to the service role', () => {
