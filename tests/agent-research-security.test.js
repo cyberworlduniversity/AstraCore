@@ -23,6 +23,13 @@ test('research URL validation rejects public names resolving to private addresse
   assert.equal(result.reason, 'hostname_resolves_to_non_public_address');
 });
 
+test('research URL validation rejects IPv6 transition and special-purpose ranges', async () => {
+  assert.equal((await validateResearchUrl('https://[2002:0a00:0001::1]')).ok, false);
+  assert.equal((await validateResearchUrl('https://[2001:0000:4136:e378:8000:63bf:3fff:fdd2]')).ok, false);
+  assert.equal((await validateResearchUrl('https://[2001:0002::1]')).ok, false);
+  assert.equal((await validateResearchUrl('https://[2001:db8::1]')).ok, false);
+});
+
 test('research fetch uses safe adapter contract, blocks redirects and marks sources untrusted', async () => {
   let receivedOptions;
   const result = await runResearch('security research', {
