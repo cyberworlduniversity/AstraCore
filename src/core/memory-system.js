@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { redactSecrets } from './safety-layer.js';
 
 export function normalizeMemory(input) {
   return {
@@ -38,7 +39,7 @@ export function selectRelevantMemories(memories = [], query = '', limit = 8, { u
     const confidence = Number(memory.confidence ?? memory.importance ?? 0.5);
     const importance = Number.isFinite(confidence) ? Math.min(Math.max(confidence, 0), 1) : 0.5;
     return {
-      content: memory.content.slice(0, 1000),
+      content: redactSecrets(memory.content.slice(0, 1000)),
       relevance: hits / Math.max(terms.length, 1) * 0.7 + importance * 0.3,
     };
   }).sort((a, b) => b.relevance - a.relevance).slice(0, safeLimit);
@@ -47,7 +48,7 @@ export function selectRelevantMemories(memories = [], query = '', limit = 8, { u
 /** Memory is context, never an instruction source. */
 export function buildMemoryContext(memories = []) {
   const safe = (Array.isArray(memories) ? memories : []).slice(0, 8)
-    .map((memory) => String(memory?.content || '').trim().slice(0, 1000))
+    .map((memory) => redactSecrets(String(memory?.content || '').trim().slice(0, 1000)))
     .filter(Boolean);
   if (!safe.length) return '';
   return [
