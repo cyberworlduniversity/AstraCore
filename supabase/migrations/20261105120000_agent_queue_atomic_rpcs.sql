@@ -417,3 +417,46 @@ revoke all on function public.create_astracore_agent_plan(uuid, text, jsonb) fro
 revoke all on function public.request_astracore_agent_run_cancel(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.create_astracore_agent_plan(uuid, text, jsonb) to service_role;
 grant execute on function public.request_astracore_agent_run_cancel(uuid, uuid) to service_role;
+
+
+-- Service-role worker search is explicitly tenant-scoped because auth.uid()
+-- is not populated for a service-role request.
+create or replace function public.search_astracore_knowledge_for_user(
+  p_user_id uuid,
+  search_query text,
+  result_limit integer default 5
+)
+returns table(
+  chunk_id uuid, document_id uuid, title text, source text, url text,
+  chunk_index integer, content text, keyword_score real, combined_score real
+)
+language sql
+stable
+security invoker
+set search_path = pg_catalog, public, extensions
+as $$
+  with keyword_hits as (
+    select c.id as chunk_id, c.document_id, d.title, d.source, d.url,
+      c.chunk_index, c.content,
+      ts_rank(
+        to_tsvector('simple', c.content),
+        websearch_to_tsquery('simple', search_query)
+      )::real as keyword_score
+    from public.astracore_knowledge_chunks as c
+    join public.astracore_knowledge_documents as d on d.id = c.document_id
+    where c.user_id = p_user_id
+      and search_query is not null
+      and length(search_query) between 1 and 2000
+      and to_tsvector('simple', c.content) @@ websearch_to_tsquery('simple', search_query)
+    order by keyword_score desc
+    limit greatest(1, least(coalesce(result_limit, 5), 20))
+  )
+  select chunk_id, document_id, title, source, url, chunk_index, content,
+    keyword_score, keyword_score as combined_score
+  from keyword_hits
+  order by keyword_score desc
+  limit greatest(1, least(coalesce(result_limit, 5), 20));
+$$;
+
+revoke all on function public.search_astracore_knowledge_for_user(uuid, text, integer) from public, anon, authenticated;
+grant execute on function public.search_astracore_knowledge_for_user(uuid, text, integer) to service_role;
