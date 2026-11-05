@@ -26,6 +26,12 @@ Retryable failures use bounded exponential backoff (5 seconds, doubling to a 300
 - The idempotency key is unique per user when supplied; callers should reuse it for retrying the same enqueue request.
 - These SQL functions are foundations, not a deployed worker service. No scheduler, queue consumer, enqueue API, or automatic retries are active yet.
 
+## Worker runtime foundation
+
+`src/agent/worker.js` now provides a dependency-injected, one-tick worker runtime. It validates run ownership and task/plan consistency, renews leases while execution is in progress, checks cancellation, persists progress through a lease-aware adapter, and refuses to persist a result after lease loss. It deliberately does not create its own Supabase client or read secrets; the future private worker process must supply server-side adapters.
+
+The `completeJob` adapter has a strict contract: persist the agent-run terminal result and mark the queue job succeeded atomically in one database transaction/RPC. If its response is uncertain, the worker does not call the failure/retry path, avoiding duplicate execution after a possibly committed result. The runtime is tested with injected adapters but is not connected to a live queue or deployed.
+
 ## Required next integration work
 
 1. Verify the actual Supabase project schema and migration history.
