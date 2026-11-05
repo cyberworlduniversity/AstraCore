@@ -28,3 +28,10 @@ POST /api/agents currently writes task and metadata fields, but the live public.
 8. Verify Supabase Storage object policies and model checkpoint/runtime compatibility on Vercel.
 
 No production branch, deployment, or Supabase schema/data was modified.
+
+## Additional verification notes
+
+- Both Vercel projects generated READY preview deployments for this branch. These confirm web build completion, not a test-suite pass or live model inference.
+- Environment metadata was inspected without decrypting secrets. The astracore-ai variables returned by the connector are production-scoped; no preview-scoped entries were returned. The astracore-ai-v01 project returned no environment-variable entries. Verify preview backend/auth connectivity before relying on these previews.
+- Existing GitHub Actions workflows target main pushes and pull requests into main, not feature-branch pushes. They configure Node 20 although package.json requires Node 24. One workflow also grants contents: write and has an automatic commit/push step on main; review that automation before depending on it for releases.
+- Tests for the agent plan and fail-closed tool policy were added on this branch, but no GitHub Actions test run has yet confirmed them.
