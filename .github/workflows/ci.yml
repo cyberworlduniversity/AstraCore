@@ -12,6 +12,20 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: astracore_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d astracore_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,6 +41,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
       - name: Install dependencies
         run: npm ci
 
@@ -39,6 +56,11 @@ jobs:
       - name: Run Python test suite
         run: python -m pytest -q
 
+      - name: Run durable agent queue PostgreSQL integration tests
+        env:
+          PGPASSWORD: postgres
+        run: psql -h 127.0.0.1 -U postgres -d astracore_test -v ON_ERROR_STOP=1 -f tests/postgres/agent-queue.integration.sql
+
       - name: Compile AstraCoreLM serving modules
         run: python -m py_compile model/serving_v02.py scripts/serve_lm_v02.py
 
@@ -49,4 +71,3 @@ jobs:
           node --check server/knowledge-api.js
           node --check server/embedding-service.js
           node --check api/[...path].js
-
