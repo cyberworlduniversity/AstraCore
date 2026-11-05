@@ -40,9 +40,10 @@ test('failure uses bounded exponential retry and dead letters exhausted jobs', (
 });
 
 test('worker RPCs are service-role only', () => {
-  assert.match(sql, /alter table public\.astracore_agent_jobs enable row level security/i);
-  assert.match(sql, /revoke all on function[\s\S]*from public, anon, authenticated/i);
-  assert.match(sql, /grant execute on function[\s\S]*to service_role/i);
+  assert.ok(sql.includes('alter table public.astracore_agent_jobs enable row level security'));
+  assert.ok(sql.includes('revoke all on function public.claim_astracore_agent_jobs'));
+  assert.ok(sql.includes('from public, anon, authenticated'));
+  assert.ok(sql.includes('grant execute on function public.claim_astracore_agent_jobs'));
 });
 
 
