@@ -2,74 +2,78 @@
 
 ## Release decision
 
-**Status: NOT PRODUCTION READY.** AstraCore has a substantial working prototype and a private agent-worker foundation, but the model checkpoint, live database migrations, worker deployment, and production verification are not complete. Do not describe this release as a fully production-ready autonomous AI agent.
+**Status: NOT PRODUCTION READY.** AstraCore has a substantial experimental agent and LLM platform, and the development branch now includes additional security, RAG, and agent-queue fixes. The live database migrations, private worker and embedding service, production model checkpoint, and production verification are not complete.
 
-This report records a read-only audit of the connected GitHub, Supabase, and Vercel projects plus branch-only code changes. No live Supabase migration, grant, policy, data, or production deployment was changed.
+This report records a read-only audit of the connected GitHub, Supabase, and Vercel projects plus branch-only code changes. No live Supabase migration, grant, policy, data, secret, or production deployment was changed.
 
 ## Development branch
 
 - Repository: `cyberworlduniversity/AstraCore`
 - Branch: `fix/agent-runs-contract`
+- Current report commit: `2853f30e4eb96407a598df41af5a57eb59a9ede9`
 - Pull request: [#9 — AstraCore agent, memory, RAG and security hardening](https://github.com/cyberworlduniversity/AstraCore/pull/9)
 - PR remains draft and unmerged.
 
 ## Code changes on the branch
 
 1. **Agent queue:** atomic run/job creation, per-user idempotency, lease-based worker ownership, bounded retries, cancellation handling, and service-role-only queue RPCs.
-2. **Database grants:** the new migration revokes all direct `anon` and `authenticated` privileges on `astracore_agent_runs`, then grants authenticated users read access only. Writes are routed through private service-role functions.
-3. **Admin RLS helper:** a new migration makes `astracore_is_admin()` invoker-security, pins its search path, revokes execution from `public` and `anon`, and grants execution to `authenticated` and `service_role`.
-4. **PostgreSQL test harness:** fixed the dollar-quote terminator and psql include command; added checks for anonymous/direct-write grants and admin-helper privileges.
-5. **Production gate:** checkpoint and tokenizer provenance must be valid 64-character SHA-256 hashes; malformed and expired approval timestamps fail closed.
-6. **Web research SSRF guard:** blocks additional IPv6 special-purpose and transition ranges, including 6to4 and IETF protocol-assignment space; tests cover these addresses.
-7. **RAG parity:** Vercel chat now requests query embeddings before hybrid knowledge search, matching the local server path.
-8. **Memory:** both chat paths retrieve only the authenticated user's explicitly consented, non-revoked, non-expired memories. Memory context is marked untrusted and common credential patterns are redacted before model use. Missing owner identity fails closed.
+2. **Database grants:** the queue migration revokes direct `anon` and `authenticated` privileges on agent-run/job tables and routes private writes through service-role RPCs.
+3. **Admin RLS helper:** a migration makes `astracore_is_admin()` invoker-security, pins its search path, revokes execution from `public` and `anon`, and grants execution to `authenticated` and `service_role`.
+4. **Duplicate RLS policies:** a migration removes eight exact duplicate admin policies on training runs, model versions, and model registry. This is intended to remove the seven direct `auth.jwt()` init-plan warnings and corresponding duplicate policy overlaps after the migration is applied. It does not remove intentional owner-plus-admin access policies.
+5. **PostgreSQL test harness:** repaired psql include/dollar-quote issues and added checks for queue grants, admin helper privileges, and duplicate-policy removal. The expanded PostgreSQL CI rerun is still pending.
+6. **Production gate:** checkpoint and tokenizer provenance must be valid 64-character SHA-256 hashes; malformed and expired approval timestamps fail closed.
+7. **Web research SSRF guard:** blocks IPv6 transition, IETF protocol-assignment, and documentation ranges, including 6to4 and `3fff::/20`; tests cover these cases.
+8. **Session security:** signed session MACs are compared in constant time, with a tampered-cookie regression test.
+9. **RAG and embeddings:** Vercel chat requests query embeddings; a validated self-hosted AstraCoreEmbed HTTP client is available for serverless deployments, while local development retains the Python checkpoint path. The remote embedding service itself is not deployed.
+10. **Memory:** both chat paths retrieve only the authenticated user's explicitly consented, non-revoked, non-expired memories. Memory context is marked untrusted and common credential patterns are redacted before model use. Missing owner identity fails closed.
+11. **Vercel agent route:** the Vercel handler now passes the server-only Supabase service client into the agent routes. A handler-level test verifies that the service-role RPC is called with the server secret and authenticated user's ID. The secret is still missing from the live Vercel environment, so agent queue execution remains unavailable until configured.
+12. **Diagnostics and configuration:** the API returns a clear `AGENT_QUEUE_NOT_CONFIGURED` response when the server-only service-role secret is absent; `.env.example` documents server-only queue and embedding variables.
 
 ## Automated verification
 
-At the latest check on this branch:
+- Node test suite: **147 passed, 0 failed** on commit `1f9ffcd9`. This includes the Vercel agent-route wiring, embedding-client, signed-cookie, memory, and SSRF tests.
+- Release-gate verification: passed on code commit `36e8d3d5`; a later run for `1f9ffcd9` was still running at the last poll.
+- Python model/document tests: a previous run reported **34 passed**; the current full rerun was still in progress at the last poll.
+- PostgreSQL integration: an initial run exposed a malformed test delimiter. The delimiter was fixed in commit `0310e141`; the corrected integration rerun was still in progress at the last poll. Do not treat the new migration test as passed until that run completes.
+- The current branch head `2853f30e` adds an additional missing-service-role configuration test; its CI run was queued at the last poll.
+- Vercel runtime error review: **no runtime errors found** in the selected last-seven-day window.
+- A Vercel Preview deployment exists for earlier branch commit `676b0454`, but **there is no deployment for current branch head `2853f30e`**. Earlier GitHub Vercel checks also reported a build-rate-limit failure. Do not use the older preview as verification of the latest code.
 
-- AstraCore Node test workflow: **passed** on code commit `0b4a1496`.
-- Production release-gate verification: **passed** on code commit `0b4a1496`.
-- Node.js 24 tests: **passed**.
-- Python model/document tests: **passed**.
-- Combined AstraCore CI, including the PostgreSQL integration job: **passed** on code commit `0b4a1496`.
-- The current branch head `2413948c` adds this report only; its Node tests and release-gate verification also passed, while its duplicate combined CI run was still in progress at the last poll.
-- Vercel checks for the latest branch head: **failed because the account hit the Vercel build-rate limit**. Previously ready previews are from older commits and do not verify the latest branch head.
-
-Passing CI validates the tested code paths; it does not certify model quality, live database security, worker availability, or production operations.
+Passing Node tests does not certify model quality, live database security, worker availability, or production operations.
 
 ## Live Supabase findings
 
 - RLS is enabled on the inspected public tables.
-- The live `astracore_agent_runs` table still grants all table privileges to both `anon` and `authenticated`. The branch migration has not been applied.
+- The live migration history currently ends at `20261102104707`; the November 5 branch migrations have not been applied.
+- The live `astracore_agent_runs` table still grants all table privileges to both `anon` and `authenticated`. The branch migration addresses this, but it is not live.
 - The live `astracore_is_admin()` helper is currently `SECURITY DEFINER`; the live privilege check reports that `authenticated` cannot execute it, although authenticated RLS policies reference it. The branch migration addresses this.
-- The security advisor reports leaked-password protection disabled.
-- Performance advisor findings include 7 auth-function init-plan warnings, 46 multiple-permissive-policy warnings, and 30 unused-index notices. These are review items; unused-index notices alone do not prove an index should be dropped.
-- The agent queue migration is not applied to the live database; the live queue table is not yet available.
+- The security advisor currently reports leaked-password protection disabled.
+- Performance advisor findings currently include 7 auth-function init-plan warnings, 46 multiple-permissive-policy warnings, and 30 unused-index notices. The branch migration removes exact duplicate admin policies, but no live advisor rerun can confirm the effect until it is applied in a test database. Unused-index notices alone do not justify dropping indexes.
 
 ## Live Vercel findings
 
 - The production environment has a Supabase publishable-key variable, not a configured service-role variable.
 - The environment listing did not contain `ASTRACORE_SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_SERVICE_ROLE_KEY`.
-- The environment listing did not contain an approved AstraCoreLM inference endpoint/token configuration.
-- Never put a Supabase service-role key or model-serving secret in browser/client code or share it in chat. Add secrets directly to the appropriate Vercel server/worker environment after reviewing access and scope.
-- New preview checks are currently blocked by the Vercel build-rate limit.
+- The environment listing did not contain an approved AstraCoreLM inference endpoint/token or a private AstraCoreEmbed endpoint/token.
+- Never put service-role or model-serving secrets in browser/client code, public build arguments, logs, or chat. Add them directly to the appropriate Vercel server/worker environment.
+- A ready preview exists for an earlier branch commit; the current branch head has no preview deployment yet.
 
 ## Model and capability blockers
 
 The repository's recorded certification dated 30 October 2026 says AstraCoreLM is untrained and has no production checkpoint registered. That historical record reports 1 training document, 0 validation documents, validation loss about 39.04, and perplexity about 8.99e16. These are historical recorded results, not a fresh training run.
 
-The same record reports AstraCoreEmbed evaluated on 12 pairs with top-1 accuracy 0.75, but not production-certified. The private worker is not deployed. Multimodal adapters, a real coding sandbox, a fully configured web-research provider, model training/evaluation evidence, backups/restore drills, and rollback evidence remain incomplete.
+The same record reports AstraCoreEmbed evaluated on 12 pairs with top-1 accuracy 0.75, but not production-certified. The private worker and private embedding service are not deployed. Multimodal adapters, a real coding sandbox, a fully configured web-research provider, model training/evaluation evidence, backups/restore drills, and rollback evidence remain incomplete.
 
 ## Required before a production release
 
-1. Review and apply the branch migrations to a disposable/staging database first; verify grants, RLS, queue concurrency, leases, cancellation, tenant isolation, and rollback before considering production.
-2. Configure the server/worker service-role secret directly in Vercel and deploy the private worker to a supported long-running host.
-3. Deploy an owned AstraCoreLM inference service with a hash-pinned, explicitly approved checkpoint; train and evaluate it using data you own or are licensed to use.
-4. Complete independent model-quality, adversarial, privacy, and security evaluations. Keep unsafe tools disabled until a real isolation sandbox exists.
-5. Enable leaked-password protection if the Supabase plan supports it. Supabase documents this feature as available on Pro and above.
-6. Resolve the relevant RLS policy warnings, verify backups and restore, document rollback, and complete production smoke tests after the Vercel build limit is cleared.
+1. Apply and validate the branch migrations in a disposable/staging database first; verify grants, RLS, queue concurrency, leases, cancellation, tenant isolation, and rollback before considering production.
+2. Add the server-only Supabase service-role secret directly in Vercel, then deploy the private worker to a supported long-running host.
+3. Deploy the self-hosted AstraCoreEmbed service and configure its server-only URL/token for Vercel hybrid RAG.
+4. Deploy an owned AstraCoreLM inference service with a hash-pinned, explicitly approved checkpoint; train and evaluate it using data you own or are licensed to use.
+5. Complete independent model-quality, adversarial, privacy, and security evaluations. Keep unsafe tools disabled until a real isolation sandbox exists.
+6. Enable leaked-password protection if the Supabase plan supports it.
+7. Review remaining RLS policy overlaps, verify backups and restore, document rollback, and complete production smoke tests after the current Vercel build limit clears.
 
 ## Submission wording
 
-For a submission today, describe AstraCore as an **experimental self-owned AI agent and LLM platform with a tested agent-queue/security hardening branch**. Do not claim it is production-ready until the blockers above are closed and independently verified.
+For a submission today, describe AstraCore as an **experimental self-owned AI-agent and LLM platform with durable agent-queue, RAG, memory-isolation, and security hardening in a draft development branch**. Do not claim it is production-ready until the blockers above are closed and independently verified.
