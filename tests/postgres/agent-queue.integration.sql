@@ -7,12 +7,12 @@ create role authenticated nologin;
 create role service_role nologin bypassrls;
 create schema auth;
 create table auth.users (id uuid primary key);
-create or replace function auth.uid() returns uuid language sql stable as $ select null::uuid $;
-create or replace function auth.jwt() returns jsonb language sql stable as $
+create or replace function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
+create or replace function auth.jwt() returns jsonb language sql stable as $$
   select nullif(current_setting('request.jwt.claims', true), '')::jsonb;
-$;
+$$;
 
-\\ir ../../supabase/migrations/20261105130000_harden_admin_rls_helper.sql
+\ir ../../supabase/migrations/20261105130000_harden_admin_rls_helper.sql
 
 create table public.astracore_agent_runs (
   id uuid primary key default gen_random_uuid(),
