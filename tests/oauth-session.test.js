@@ -158,3 +158,24 @@ test('OAuth redirects use the active Vercel deployment URL when no public URL ov
     else process.env.VERCEL_URL = previousVercelUrl;
   }
 });
+
+
+test('tampered signed OAuth session cookies are rejected before Supabase access', async () => {
+  const flow = auth.oauthStart('google');
+  const state = new URL(flow.url).searchParams.get('state');
+  const original = flow.cookie.match(/^astracore_oauth=([^;]+)/)?.[1];
+  assert.ok(original);
+  const last = original.at(-1);
+  const tampered = original.slice(0, -1) + (last === 'a' ? 'b' : 'a');
+  let called = false;
+  globalThis.fetch = async () => {
+    called = true;
+    throw new Error('Supabase must not be called for a tampered session');
+  };
+
+  await assert.rejects(
+    auth.exchangeOAuthCode('one-time-auth-code', state, { headers: { cookie: `astracore_oauth=${tampered}` } }),
+    (error) => error.status === 401,
+  );
+  assert.equal(called, false);
+});
