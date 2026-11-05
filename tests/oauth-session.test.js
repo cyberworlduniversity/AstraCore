@@ -84,3 +84,57 @@ test('OAuth code exchange rejects expired or missing state cookies', async () =>
   );
   assert.match(auth.clearOAuthCookie(), /Max-Age=0/);
 });
+
+test('expired access tokens can be refreshed while the signed session cookie remains valid', async () => {
+  const flow = auth.oauthStart('google');
+  const state = new URL(flow.url).searchParams.get('state');
+  const originalNow = Date.now;
+  const user = {
+    id: 'user-refresh',
+    email: 'refresh@example.com',
+    user_metadata: { name: 'Refresh User' },
+    app_metadata: { provider: 'google' },
+  };
+
+  globalThis.fetch = async (url) => {
+    const value = String(url);
+    if (value.endsWith('/auth/v1/token?grant_type=pkce')) {
+      return new Response(JSON.stringify({
+        access_token: 'old-access-token',
+        refresh_token: 'old-refresh-token',
+        expires_in: 60,
+        user,
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (value.endsWith('/auth/v1/user')) {
+      return new Response(JSON.stringify({ message: 'JWT expired' }), {
+        status: 401,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (value.endsWith('/auth/v1/token?grant_type=refresh_token')) {
+      return new Response(JSON.stringify({
+        access_token: 'new-access-token',
+        refresh_token: 'new-refresh-token',
+        expires_in: 3600,
+        user,
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    throw new Error(`Unexpected auth request: ${value}`);
+  };
+
+  try {
+    const result = await auth.exchangeOAuthCode('one-time-auth-code', state, requestFor(flow));
+    const cookie = auth.sessionCookie(result.token).split(';')[0];
+    Date.now = () => originalNow() + 120_000;
+
+    const req = { headers: { cookie } };
+    const current = await auth.currentUser(req);
+
+    assert.equal(current.id, 'user-refresh');
+    assert.ok(req.astracoreRefreshedSession);
+    assert.equal(req.astracoreAccessToken, 'new-access-token');
+  } finally {
+    Date.now = originalNow;
+  }
+});
