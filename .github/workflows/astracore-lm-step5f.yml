@@ -242,9 +242,6 @@ jobs:
           files=sorted(p for p in root.rglob('*') if p.is_file())
           if not files:
               raise SystemExit('No evidence files were produced; refusing to publish an empty artifact.')
-          with (root/'checksums.sha256').open('w') as out:
-              for p in files:
-                  out.write(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+str(p.relative_to(root))+'\\n')
           status_path=Path('step5-stage-status.json')
           if status_path.is_file():
               status=json.loads(status_path.read_text())
@@ -259,6 +256,10 @@ jobs:
               manifest['production_gate']='CLOSED'
               manifest_path.write_text(json.dumps(manifest,indent=2)+'\\n')
               shutil.copy2(manifest_path,root/'step5-run-manifest.json')
+          files=sorted(p for p in root.rglob('*') if p.is_file() and p.name!='checksums.sha256')
+          with (root/'checksums.sha256').open('w') as out:
+              for p in files:
+                  out.write(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+str(p.relative_to(root))+'\\n')
           PY
           tar -czf step5f-evidence.tar.gz step5f-evidence
           sha256sum step5f-evidence.tar.gz > step5f-evidence.sha256
