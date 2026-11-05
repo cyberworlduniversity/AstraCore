@@ -10,8 +10,10 @@ const REQUIRED_CAPABILITIES = Object.freeze([
 ]);
 
 const BLOCKING_MODEL_STATES = new Set(['untrained', 'training', 'failed', 'evaluation_failed', 'retired', 'revoked', 'expired']);
+const SHA256_PATTERN = /^[a-f0-9]{64}$/i;
 
 function nonEmpty(value) { return typeof value === 'string' && value.trim().length > 0; }
+function validSha256(value) { return typeof value === 'string' && SHA256_PATTERN.test(value); }
 
 export function evaluateProductionReadiness({
   model = null,
@@ -26,11 +28,15 @@ export function evaluateProductionReadiness({
   if (!model || BLOCKING_MODEL_STATES.has(model.status)) blockers.push(`language_model:${model?.status || 'missing'}`);
   if (!model?.checkpoint_path) blockers.push('language_model:checkpoint_missing');
   if (model?.production_ready !== true) blockers.push('language_model:production_not_approved');
-  if (!nonEmpty(model?.checkpoint_sha256)) blockers.push('language_model:checkpoint_checksum_missing');
-  if (!nonEmpty(model?.tokenizer_sha256)) blockers.push('language_model:tokenizer_checksum_missing');
+  if (!validSha256(model?.checkpoint_sha256)) blockers.push('language_model:checkpoint_checksum_invalid');
+  if (!validSha256(model?.tokenizer_sha256)) blockers.push('language_model:tokenizer_checksum_invalid');
   if (!nonEmpty(model?.model_version)) blockers.push('language_model:model_version_missing');
   if (!nonEmpty(model?.evaluation_id)) blockers.push('language_model:evaluation_evidence_missing');
-  if (model?.expires_at && Date.parse(model.expires_at) <= Date.now()) blockers.push('language_model:expired');
+
+  if (model?.expires_at) {
+    const expiry = Date.parse(model.expires_at);
+    if (!Number.isFinite(expiry) || expiry <= Date.now()) blockers.push('language_model:expired_or_invalid_expiry');
+  }
   if (model?.revoked_at) blockers.push('language_model:revoked');
 
   if (!embedding || embedding.status !== 'ready') blockers.push(`embeddings:${embedding?.status || 'missing'}`);
