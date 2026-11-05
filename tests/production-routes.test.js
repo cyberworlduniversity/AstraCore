@@ -11,15 +11,16 @@ function responseCapture() {
   };
 }
 
-function route({ method, path, user = { id: 'u1' }, body = '{}', request, modelClient, knowledgeSearch }) {
+function route({ method, path, user = { id: 'u1' }, body = '{}', request, serviceRequest, headers = {}, modelClient, knowledgeSearch }) {
   const res = responseCapture();
   return handleProductionRoute({
-    req: { method }, res,
+    req: { method, headers }, res,
     url: new URL(`http://localhost${path}`),
     user,
     readBody: async () => body,
     json: (r, status, payload) => { r.writeHead(status); r.end(JSON.stringify(payload)); },
     supabaseUserRequest: request || (async () => []),
+    supabaseServiceRequest: serviceRequest,
     modelClient,
     knowledgeSearch,
   }).then(() => res);
@@ -132,51 +133,74 @@ test('tool authorization fails closed without active adapter and valid approval'
 });
 
 
-test('agent execution requires a model runtime and fails closed when unavailable', async () => {
-  const res = await route({ method: 'POST', path: '/api/agents', body: JSON.stringify({ task: 'Calculate 2+2', execute: true }) });
-  assert.equal(res.status, 503);
-  assert.equal(res.body.error, 'AGENT_RUNTIME_NOT_READY');
+test('agent execute atomically enqueues a run through the private service-role RPC', async () => {
+  let call = null;
+  const res = await route({
+    method: 'POST',
+    path: '/api/agents',
+    user: { id: 'authenticated-user-9' },
+    headers: { 'idempotency-key': 'agent-request-2026-11-05-001' },
+    body: JSON.stringify({ task: 'Summarize my notes', agent_type: 'research', execute: true, max_attempts: 4 }),
+    serviceRequest: async (requestPath, options) => {
+      call = { requestPath, options };
+      return [{ run_id: 'run-queued-9', job_id: 'job-queued-9', run_status: 'running', job_status: 'queued', created: true }];
+    },
+    modelClient: { generate: async () => { throw new Error('model must not execute inside the API request'); } },
+  });
+  assert.equal(res.status, 202);
+  assert.equal(call.requestPath, '/rest/v1/rpc/create_astracore_agent_run_and_enqueue');
+  assert.equal(call.options.method, 'POST');
+  const payload = JSON.parse(call.options.body);
+  assert.equal(payload.p_user_id, 'authenticated-user-9');
+  assert.equal(payload.p_agent_type, 'research');
+  assert.equal(payload.p_plan.task, 'Summarize my notes');
+  assert.equal(payload.p_idempotency_key, 'agent-request-2026-11-05-001');
+  assert.equal(payload.p_max_attempts, 4);
+  assert.equal(res.body.agent_run.id, 'run-queued-9');
+  assert.equal(res.body.job.id, 'job-queued-9');
+  assert.equal(res.body.execution, 'queued');
+  assert.equal(res.body.idempotent_replay, false);
 });
 
-test('agent execution persists a durable run and progress using only safe built-in tools', async () => {
-  let inserted = null;
+test('agent execute replays the same idempotent run without inline model execution', async () => {
   let calls = 0;
   const res = await route({
     method: 'POST',
     path: '/api/agents',
-    user: { id: 'user-agent-2' },
-    body: JSON.stringify({ task: 'Calculate 12 times 8', agent_type: 'general', execute: true }),
-    modelClient: {
-      generate: async () => ({ text: ++calls === 1
-        ? JSON.stringify({ steps: ['Calculate'], tool_calls: [{ name: 'calculator', input: { expression: '12*8' } }, { name: 'code_execution', input: { code: 'no' } }] })
-        : 'The result is 96.' }),
-    },
-    request: async (_req, requestPath, options) => {
-      assert.match(requestPath, /^\/rest\/v1\/astracore_agent_runs/);
-      if (options?.method === 'POST') {
-        inserted = { id: 'run-2', ...JSON.parse(options.body) };
-        return [inserted];
-      }
-      if (options?.method === 'PATCH') {
-        Object.assign(inserted, JSON.parse(options.body));
-        return requestPath.includes('cancel_requested_at=is.null') ? [inserted] : [];
-      }
-      if (requestPath.includes('cancel_requested_at=not.is.null')) return [];
-      if (requestPath.includes('select=*&limit=1')) return [inserted];
-      return [];
+    user: { id: 'authenticated-user-9' },
+    body: JSON.stringify({ task: 'Summarize my notes', execute: true, idempotency_key: 'same-request-key' }),
+    serviceRequest: async () => {
+      calls += 1;
+      return [{ run_id: 'run-existing', job_id: 'job-existing', run_status: 'running', job_status: 'queued', created: false }];
     },
   });
-  assert.equal(res.status, 200);
-  assert.equal(calls, 3);
-  assert.equal(inserted.user_id, 'user-agent-2');
-  assert.equal(inserted.status, 'completed');
-  assert.equal(inserted.result.execution, 'completed');
-  assert.deepEqual(inserted.result.tools_executed, ['calculator']);
-  assert.equal(inserted.result.answer, 'The result is 96.');
-  assert.equal(inserted.execution_state.phase, 'completed');
-  assert.ok(inserted.started_at);
-  assert.ok(inserted.finished_at);
-  assert.equal(res.body.execution_policy, 'allowlisted_read_only');
+  assert.equal(res.status, 202);
+  assert.equal(calls, 1);
+  assert.equal(res.body.agent_run.id, 'run-existing');
+  assert.equal(res.body.idempotent_replay, true);
+});
+
+test('agent execute fails closed when the private queue service is unavailable', async () => {
+  const res = await route({
+    method: 'POST',
+    path: '/api/agents',
+    user: { id: 'authenticated-user-9' },
+    body: JSON.stringify({ task: 'Run my research task', execute: true }),
+  });
+  assert.equal(res.status, 503);
+  assert.equal(res.body.error, 'AGENT_QUEUE_NOT_CONFIGURED');
+});
+
+test('agent execute rejects oversized idempotency keys before calling the queue', async () => {
+  let called = false;
+  const res = await route({
+    method: 'POST',
+    path: '/api/agents',
+    body: JSON.stringify({ task: 'Test queue', execute: true, idempotency_key: 'x'.repeat(129) }),
+    serviceRequest: async () => { called = true; return []; },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(called, false);
 });
 
 test('agent run detail is scoped to the authenticated owner', async () => {
