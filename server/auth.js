@@ -42,11 +42,20 @@ async function sessionRevoked(session){
 export async function revokeSession(req){
  const session=readSessionToken(parseCookie(req,'astracore_session'));
  if(!session?.accessToken||!session?.user?.id)return false;
+ // An expired access JWT cannot write to PostgREST. Refresh first, then revoke both
+ // generations of tokens so a rotated refresh token cannot survive logout.
+ let active=session;
+ if(Number(session.expiresAt)>0&&Number(session.expiresAt)<=Date.now()){
+  const refreshed=await refreshSession(session);
+  if(!refreshed)throw Object.assign(new Error('Unable to refresh the session for secure logout.'),{status:503});
+  active={...session,accessToken:refreshed.accessToken,refreshToken:readSessionToken(refreshed.token)?.refreshToken||session.refreshToken};
+ }
  const expiresAt=Number(session.sessionExpiresAt)||Date.now()+7*24*60*60*1000;
- const rows=[session.accessToken,session.refreshToken].filter(Boolean).map(token=>({session_hash:sessionHash(token),user_id:session.user.id,expires_at:new Date(expiresAt).toISOString()}));
- await sb('/rest/v1/astracore_revoked_sessions',{method:'POST',headers:{Authorization:`Bearer ${session.accessToken}`,Prefer:'resolution=ignore-duplicates,return=minimal'},body:JSON.stringify(rows)});
- // Supabase revokes refresh tokens; the server-side denylist blocks this access token immediately.
- try{await sb('/auth/v1/logout',{method:'POST',headers:{Authorization:`Bearer ${session.accessToken}`}})}catch{}
+ const rows=[session.accessToken,session.refreshToken,active.accessToken,active.refreshToken].filter(Boolean);
+ const uniqueRows=[...new Set(rows)].map(token=>({session_hash:sessionHash(token),user_id:session.user.id,expires_at:new Date(expiresAt).toISOString()}));
+ await sb('/rest/v1/astracore_revoked_sessions',{method:'POST',headers:{Authorization:`Bearer ${active.accessToken}`,Prefer:'resolution=ignore-duplicates,return=minimal'},body:JSON.stringify(uniqueRows)});
+ // Durable denylist protection is written before asking Supabase to revoke the refresh session.
+ try{await sb('/auth/v1/logout',{method:'POST',headers:{Authorization:`Bearer ${active.accessToken}`}})}catch{}
  return true;
 }
 export async function currentUser(req){
