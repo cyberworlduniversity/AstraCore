@@ -77,6 +77,6 @@ test('knowledge delete stops with not-found when the authenticated owner does no
 
 test('conversation DELETE repeats authenticated owner filter in the final database mutation', async () => {
   const source = await readFile(new URL('../server/server.js', import.meta.url), 'utf8');
-  const ownerScopedDelete = "astracore_conversations?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(user.id)}";
-  assert.ok(source.includes("supabaseUserRequest(req,`/rest/v1/${ownerScopedDelete}`,{method:'DELETE'})"));
+  const ownerScopedDelete = "supabaseUserRequest(req,`/rest/v1/astracore_conversations?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(user.id)}`,{method:'DELETE'})";
+  assert.ok(source.includes(ownerScopedDelete));
 });
