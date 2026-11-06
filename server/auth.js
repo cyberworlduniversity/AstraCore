@@ -66,7 +66,7 @@ export async function currentUser(req){
  if(Number(signed.expiresAt)>0&&Number(signed.expiresAt)<=Date.now()){
   const refreshed=await refreshSession(signed);if(!refreshed)return null;
   const refreshedSession=readSessionToken(refreshed.token);
-  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken,refreshToken:refreshedSession?.refreshToken||signed.refreshToken,previousAccessToken:signed.accessToken,previousRefreshToken:signed.refreshToken}))return null;
+  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken,refreshToken:refreshedSession?.refreshToken||signed.refreshToken,previousAccessToken:signed.accessToken,previousRefreshToken:signed.refreshToken,previousRefreshToken:signed.refreshToken}))return null;
   req.astracoreRefreshedSession=refreshed.token;req.astracoreAccessToken=refreshed.accessToken;return refreshed.user;
  }
  // Fail closed if the revocation store is unavailable; never silently accept an unchecked session.
@@ -74,7 +74,7 @@ export async function currentUser(req){
  try{return await userFromToken(signed.accessToken)}catch{
   const refreshed=await refreshSession(signed);if(!refreshed)return null;
   const refreshedSession=readSessionToken(refreshed.token);
-  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken,refreshToken:refreshedSession?.refreshToken||signed.refreshToken,previousAccessToken:signed.accessToken}))return null;
+  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken,refreshToken:refreshedSession?.refreshToken||signed.refreshToken,previousAccessToken:signed.accessToken,previousRefreshToken:signed.refreshToken}))return null;
   req.astracoreRefreshedSession=refreshed.token;req.astracoreAccessToken=refreshed.accessToken;return refreshed.user
  }
 }
