@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { executeToolWithPolicy } from '../src/core/tool-execution-boundary.js';
 import { ToolRegistry } from '../src/core/tool-agent-system.js';
+import { ToolRegistry as PublicToolRegistry, defaultToolDefinitions } from '../src/core/tools.js';
 
 function tool(overrides = {}) {
   return {
@@ -162,4 +163,26 @@ test('tool input rejects prototype-pollution property names', async () => {
     /Unsafe property name/,
   );
   assert.equal(req.events.length, 0);
+});
+
+test('public registry uses its injected audit writer and keeps code execution disabled', async () => {
+  const req = request();
+  const publicRegistry = new PublicToolRegistry([
+    {
+      name: 'lookup',
+      description: 'test lookup',
+      status: 'enabled',
+      riskLevel: 'low',
+      inputSchema: {
+        type: 'object',
+        required: ['query'],
+        additionalProperties: false,
+        properties: { query: { type: 'string' } },
+      },
+      execute: async ({ query }) => ({ answer: query }),
+    },
+  ], { auditWriter: req.audit });
+  assert.deepEqual(await publicRegistry.execute('lookup', { query: 'ok' }, { authenticated: true, userId: 'user-1' }), { answer: 'ok' });
+  const defaults = defaultToolDefinitions();
+  assert.equal(defaults.find((item) => item.name === 'code_execution').status, 'not_implemented');
 });
