@@ -28,7 +28,7 @@ def make_checkpoint(tmp_path):
          'text': ('astra core tests language model security and safe systems. ' * 30)},
     ]
     (corpus / 'records.jsonl').write_text(
-        ''.join(json.dumps(row) + '\\n' for row in rows), encoding='utf-8'
+        ''.join(json.dumps(row) + '\n' for row in rows), encoding='utf-8'
     )
     checkpoint = tmp_path / 'checkpoint'
     script = Path(__file__).resolve().parents[1] / 'scripts' / 'train_lm.py'
@@ -60,7 +60,7 @@ def test_behavior_evaluation_is_deterministic_and_never_approves(tmp_path):
          'expected_answer': 'safe systems'},
     ]
     benchmark.write_text(
-        ''.join(json.dumps(row) + '\\n' for row in rows), encoding='utf-8'
+        ''.join(json.dumps(row) + '\n' for row in rows), encoding='utf-8'
     )
 
     first = evaluate_checkpoint(checkpoint, benchmark, max_new_tokens=4)
@@ -86,7 +86,7 @@ def test_behavior_evaluation_rejects_config_tokenizer_mismatch(tmp_path):
     benchmark.write_text(json.dumps({
         'id': 'one', 'category': 'smoke', 'prompt': 'hello',
         'expected_answer': 'world'
-    }) + '\\n', encoding='utf-8')
+    }) + '\n', encoding='utf-8')
 
     with pytest.raises(ValueError, match='tokenizer SHA-256'):
         evaluate_checkpoint(checkpoint, benchmark)
