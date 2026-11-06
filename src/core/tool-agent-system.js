@@ -8,7 +8,7 @@ function freezeSchema(value) {
 }
 
 export class ToolRegistry {
-  constructor() { this.tools = new Map(); }
+  constructor({ auditWriter } = {}) { this.tools = new Map(); this.auditWriter = auditWriter; }
 
   register(tool) {
     if (!tool?.name || typeof tool.name !== 'string') throw new Error('tool name required');
@@ -25,7 +25,7 @@ export class ToolRegistry {
   async execute(name, input, request = {}) {
     const tool = this.get(name);
     if (!tool) throw Object.assign(new Error('Tool not found'), { status: 404 });
-    return executeToolWithPolicy(tool, input, request);
+    return executeToolWithPolicy(tool, input, { ...request, audit: this.auditWriter });
   }
 }
 
