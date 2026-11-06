@@ -40,7 +40,12 @@ def certify(checkpoint_dir, corpus_dir):
     for name in required_files:
         require((root / name).is_file(), f'missing required artifact: {name}')
 
+    # Verify the tokenizer bytes against the trusted config digest before parsing
+    # or validating its contents, so tampering is reported as an integrity failure.
+    hashes = {name: sha256_file(root / name) for name in required_files}
     config_data = json.loads((root / 'config.json').read_text(encoding='utf-8'))
+    require(config_data.get('tokenizer_sha256') == hashes['tokenizer.json'],
+            'config tokenizer SHA-256 does not match tokenizer.json')
     training = json.loads((root / 'training_state.json').read_text(encoding='utf-8'))
     evaluation = json.loads((root / 'test_evaluation.json').read_text(encoding='utf-8'))
     tokenizer = AstraTokenizer.load(root / 'tokenizer.json')
@@ -67,9 +72,6 @@ def certify(checkpoint_dir, corpus_dir):
     require(config.positional_encoding == 'learned-absolute', 'unsupported positional encoding')
     require(config.tokenizer_version == 'astratokenizer-v0.1', 'unsupported tokenizer version')
 
-    hashes = {name: sha256_file(root / name) for name in required_files}
-    require(config.tokenizer_sha256 == hashes['tokenizer.json'],
-            'config tokenizer SHA-256 does not match tokenizer.json')
     require(training.get('status') == 'trained', 'training state is not marked trained')
     require(training.get('checkpoint_selection') == 'lowest_validation_loss',
             'checkpoint was not selected by lowest validation loss')
