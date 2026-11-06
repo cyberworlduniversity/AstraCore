@@ -3,51 +3,63 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { ensureConversation, saveMessage } from '../api/[...path].js';
 
-test('chat cannot silently create a new conversation when a supplied ID is not owned', async () => {
+test('foreign conversation IDs are rejected and never replaced with a new conversation', async () => {
   const calls = [];
   await assert.rejects(
-    ensureConversation({}, { id: 'user-a' }, 'foreign-conversation', 'astracore-neural-a', 'hello'),
-    (error) => error.status === 404 && /not found/i.test(error.message),
-  ).catch((error) => {
-    if (error?.status === 404) return;
-    throw error;
-  });
-});
-
-test('conversation lookup includes the authenticated owner in the database query', async () => {
-  const calls = [];
-  await assert.rejects(
-    ensureConversation({}, { id: 'user-a' }, 'foreign-conversation', 'astracore-neural-a', 'hello'),
+    ensureConversation({}, { id: 'user-a' }, 'foreign-id', 'astracore-neural-a', 'hello', async (_req, path, options) => {
+      calls.push({ path, options });
+      return [];
+    }),
     (error) => error.status === 404,
   );
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].path, /id=eq\.foreign-id/);
+  assert.match(calls[0].path, /user_id=eq\.user-a/);
+  assert.equal(calls[0].options, undefined);
 });
 
-test('new conversation message persistence always writes authenticated user ID', async () => {
+test('an existing conversation is returned only after owner-scoped lookup', async () => {
+  const calls = [];
+  const result = await ensureConversation({}, { id: 'user-a' }, 'owned-id', 'astracore-neural-a', 'hello', async (_req, path, options) => {
+    calls.push({ path, options });
+    return [{ id: 'owned-id', user_id: 'user-a', title: 'Existing' }];
+  });
+  assert.equal(result.id, 'owned-id');
+  assert.match(calls[0].path, /user_id=eq\.user-a/);
+});
+
+test('new conversation inserts always set user_id from authenticated identity', async () => {
   let captured;
-  await saveMessage({}, { id: 'user-a' }, 'conversation-a', 'user', 'hello', 'astracore-neural-a', { inputTokens: 2 });
-  // The request adapter is supplied by the route in production; this assertion is covered below
-  // through the dedicated mock adapter test.
+  const result = await ensureConversation({}, { id: 'user-a' }, null, 'astracore-neural-a', 'hello', async (_req, path, options) => {
+    captured = { path, options };
+    return [{ id: 'new-id', user_id: 'user-a' }];
+  });
+  assert.equal(result.id, 'new-id');
+  assert.equal(captured.options.method, 'POST');
+  assert.equal(JSON.parse(captured.options.body).user_id, 'user-a');
 });
 
-test('chat persistence helper scopes message inserts to the caller and selected conversation', async () => {
-  let request;
-  await saveMessage(
-    {},
-    { id: 'user-a' },
-    'conversation-a',
-    'user',
-    'hello',
-    'astracore-neural-a',
-    { inputTokens: 2 },
-  );
-  assert.ok(true);
+test('message inserts bind the authenticated owner and conversation ID', async () => {
+  let captured;
+  await saveMessage({}, { id: 'user-a' }, 'conversation-a', 'user', 'hello', 'astracore-neural-a', { inputTokens: 2 }, async (_req, path, options) => {
+    captured = { path, options };
+    return [];
+  });
+  assert.equal(captured.path, '/rest/v1/astracore_messages');
+  assert.equal(captured.options.method, 'POST');
+  const body = JSON.parse(captured.options.body);
+  assert.equal(body.user_id, 'user-a');
+  assert.equal(body.conversation_id, 'conversation-a');
+  assert.equal(body.role, 'user');
+  assert.equal(body.content, 'hello');
 });
 
 test('Vercel conversation routes apply explicit user filters to list, read and delete', async () => {
   const source = await readFile(new URL('../api/[...path].js', import.meta.url), 'utf8');
-  assert.match(source, /astracore_conversations\?user_id=eq\.\$\{encodeURIComponent\(user\.id\)\}[^']*select=id,title/);
-  assert.match(source, /astracore_conversations\?id=eq\.\$\{encodeURIComponent\(id\)\}&user_id=eq\.\$\{encodeURIComponent\(user\.id\)\}/);
-  assert.match(source, /astracore_messages\?conversation_id=eq\.\$\{encodeURIComponent\(id\)\}&user_id=eq\.\$\{encodeURIComponent\(user\.id\)\}/);
+  assert.ok(source.includes('/rest/v1/astracore_conversations?user_id=eq.\${encodeURIComponent(user.id)}&select=id,title'));
+  assert.ok(source.includes('id=eq.\${encodeURIComponent(id)}&user_id=eq.\${encodeURIComponent(user.id)}&select=id,user_id'));
+  assert.ok(source.includes('/rest/v1/astracore_messages?conversation_id=eq.\${encodeURIComponent(id)}&user_id=eq.\${encodeURIComponent(user.id)}'));
+  assert.ok(source.includes('id=eq.\${encodeURIComponent(id)}&user_id=eq.\${encodeURIComponent(user.id)}',{method:'DELETE'}));
 });
 
 test('message owner-integrity migration protects INSERT and UPDATE ownership', async () => {
