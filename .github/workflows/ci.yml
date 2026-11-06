@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, 'feat/**', 'fix/**', 'test/**']
   pull_request:
-    branches: [main, 'feat/**', 'fix/**']
+    branches: [main, 'feat/**', 'fix/**', 'test/**']
 
 # CI is validation-only. It must never write to the repository.
 permissions:
