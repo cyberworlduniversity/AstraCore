@@ -47,12 +47,22 @@ async function create(table, payload, idField = 'id') {
 }
 async function assertRowIsPrivate(table, idColumn, id, label) {
   const filter = idColumn + '=eq.' + encodeURIComponent(id);
+  const fields = {
+    astracore_conversations: ['title', 'RLS test owner-only'],
+    astracore_memory_records: ['content', 'RLS test owner-only'],
+    astracore_projects: ['name', 'RLS test owner-only'],
+    astracore_knowledge_documents: ['title', 'RLS test owner-only'],
+    astracore_knowledge_chunks: ['content', 'RLS test owner-only'],
+    astracore_messages: ['content', 'RLS test owner-only'],
+    astracore_cloud_files: ['filename', 'owner-only.txt'],
+  };
+  const [field, attemptedValue] = fields[table];
   const read = await api(users.b, '/rest/v1/' + table + '?' + filter + '&select=' + idColumn);
   assert.ok(read.status >= 200 && read.status < 300, label + ': cross-user read returned HTTP ' + read.status);
   assert.deepEqual(read.data, [], label + ': User B can read User A row');
 
   const update = await api(users.b, '/rest/v1/' + table + '?' + filter, {
-    method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({}),
+    method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ [field]: attemptedValue }),
   });
   assert.ok(update.status >= 200 && update.status < 300, label + ': cross-user update returned HTTP ' + update.status);
   assert.deepEqual(update.data, [], label + ': User B updated User A row');
@@ -63,8 +73,9 @@ async function assertRowIsPrivate(table, idColumn, id, label) {
   assert.ok(remove.status >= 200 && remove.status < 300, label + ': cross-user delete returned HTTP ' + remove.status);
   assert.deepEqual(remove.data, [], label + ': User B deleted User A row');
 
-  const ownerRead = await api(users.a, '/rest/v1/' + table + '?' + filter + '&select=' + idColumn);
+  const ownerRead = await api(users.a, '/rest/v1/' + table + '?' + filter + '&select=' + idColumn + ',' + field);
   assert.ok(Array.isArray(ownerRead.data) && ownerRead.data.length === 1, label + ': User A lost access to own row');
+  assert.notEqual(ownerRead.data[0][field], attemptedValue, label + ': User B changed User A data');
 }
 const created = [];
 let storagePath = '';
