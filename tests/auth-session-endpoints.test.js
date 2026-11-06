@@ -58,6 +58,7 @@ test('logout refreshes an expired access token before revoking the session', asy
         user: { id: 'user-a', email: 'a@example.test', user_metadata: {}, app_metadata: { provider: 'password' } },
       }), { status: 200 });
     }
+    if (String(url).endsWith('/rest/v1/astracore_revoked_sessions') && options.method === 'POST') return new Response(null, { status: 201 });
     if (String(url).endsWith('/auth/v1/logout') && options.headers?.Authorization === 'Bearer fresh-access') {
       return new Response(null, { status: 204 });
     }
@@ -69,7 +70,7 @@ test('logout refreshes an expired access token before revoking the session', asy
     const res = responseCapture();
     await logoutHandler(req, res);
     assert.equal(res.statusCode, 200);
-    assert.deepEqual(calls.map((call) => call.url.split('/').pop()), ['logout', 'token?grant_type=refresh_token', 'logout']);
+    assert.deepEqual(calls.map((call) => call.url.split('/').pop()), ['token?grant_type=refresh_token', 'astracore_revoked_sessions', 'logout']);
     assert.equal(calls[2].options.headers.Authorization, 'Bearer fresh-access');
   } finally {
     globalThis.fetch = originalFetch;
@@ -81,6 +82,7 @@ test('auth/me persists the rotated cookie after refreshing an expired access tok
   const calls = [];
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url: String(url), options });
+    if (String(url).includes('/rest/v1/astracore_revoked_sessions')) return new Response(JSON.stringify([]), { status: 200 });
     if (String(url).endsWith('/auth/v1/user')) {
       return new Response(JSON.stringify({ message: 'JWT expired' }), { status: 401 });
     }
