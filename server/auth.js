@@ -65,14 +65,16 @@ export async function currentUser(req){
  // a revoked refresh token is rejected by Supabase, and the replacement token is then checked.
  if(Number(signed.expiresAt)>0&&Number(signed.expiresAt)<=Date.now()){
   const refreshed=await refreshSession(signed);if(!refreshed)return null;
-  const refreshedSession=readSessionToken(refreshed.token);\n  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken,refreshToken:refreshedSession?.refreshToken||signed.refreshToken,previousAccessToken:signed.accessToken}))return null;
+  const refreshedSession=readSessionToken(refreshed.token);
+  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken,refreshToken:refreshedSession?.refreshToken||signed.refreshToken,previousAccessToken:signed.accessToken}))return null;
   req.astracoreRefreshedSession=refreshed.token;req.astracoreAccessToken=refreshed.accessToken;return refreshed.user;
  }
  // Fail closed if the revocation store is unavailable; never silently accept an unchecked session.
  if(await sessionRevoked(signed))return null;
  try{return await userFromToken(signed.accessToken)}catch{
   const refreshed=await refreshSession(signed);if(!refreshed)return null;
-  const refreshedSession=readSessionToken(refreshed.token);\n  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken,refreshToken:refreshedSession?.refreshToken||signed.refreshToken,previousAccessToken:signed.accessToken}))return null;
+  const refreshedSession=readSessionToken(refreshed.token);
+  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken,refreshToken:refreshedSession?.refreshToken||signed.refreshToken,previousAccessToken:signed.accessToken}))return null;
   req.astracoreRefreshedSession=refreshed.token;req.astracoreAccessToken=refreshed.accessToken;return refreshed.user
  }
 }
