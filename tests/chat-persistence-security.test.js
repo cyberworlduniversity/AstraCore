@@ -59,7 +59,7 @@ test('Vercel conversation routes apply explicit user filters to list, read and d
   assert.ok(source.includes('/rest/v1/astracore_conversations?user_id=eq.\${encodeURIComponent(user.id)}&select=id,title'));
   assert.ok(source.includes('id=eq.\${encodeURIComponent(id)}&user_id=eq.\${encodeURIComponent(user.id)}&select=id,user_id'));
   assert.ok(source.includes('/rest/v1/astracore_messages?conversation_id=eq.\${encodeURIComponent(id)}&user_id=eq.\${encodeURIComponent(user.id)}'));
-  assert.ok(source.includes('id=eq.\${encodeURIComponent(id)}&user_id=eq.\${encodeURIComponent(user.id)}',{method:'DELETE'}));
+  assert.ok(source.includes('&user_id=eq.\${encodeURIComponent(user.id)}`,{method:\'DELETE\'}));
 });
 
 test('message owner-integrity migration protects INSERT and UPDATE ownership', async () => {
