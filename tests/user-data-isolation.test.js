@@ -40,7 +40,7 @@ test('knowledge deletion scopes document, chunks, and source to the same owner',
     user: { id: 'user-a' },
     request: async (_req, path, options) => {
       calls.push({ path, method: options?.method || 'GET' });
-      if (!options) return [{ id: '00000000-0000-4000-8000-000000000001', source_id: '00000000-0000-4000-8000-000000000002' }];
+      if (!options?.method) return [{ id: '00000000-0000-4000-8000-000000000001', source_id: '00000000-0000-4000-8000-000000000002' }];
       return [];
     },
   });
