@@ -18,7 +18,7 @@ function readSandboxConfig(env) {
   if (!/^.+@sha256:[a-f0-9]{64}$/.test(image)) {
     throw sandboxError('A digest-pinned sandbox image is required', 503, 'SANDBOX_IMAGE_NOT_PINNED');
   }
-  if (!dockerHost.startsWith(REQUIRED_DOCKER_SOCKET_PREFIX)) {
+  if (dockerHost !== REQUIRED_DOCKER_SOCKET_PREFIX + 'docker.sock') {
     throw sandboxError('A dedicated rootless sandbox Docker socket is required', 503, 'SANDBOX_DAEMON_NOT_ISOLATED');
   }
   return { image, dockerHost };
