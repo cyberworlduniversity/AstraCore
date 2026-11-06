@@ -27,7 +27,7 @@ test('message IDs are deterministic per request and role, but differ across role
   const userId=idempotentMessageId(requestId,'user');
   assert.equal(userId,idempotentMessageId(requestId,'user'));
   assert.notEqual(userId,idempotentMessageId(requestId,'assistant'));
-  assert.match(userId,/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.match(userId,/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 });
 
 test('invalid request IDs and unsupported roles are rejected',()=>{
