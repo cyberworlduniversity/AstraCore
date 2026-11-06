@@ -4,8 +4,8 @@
 
 The tool registry now routes calls through one policy-enforced execution boundary. Before an adapter is called, the boundary:
 
-- Requires an authenticated principal and a trusted audit writer.
-- Requires the tool to be explicitly enabled and, when supplied, present in the caller's allow-list.
+- Requires a trusted server-side authorization resolver, authenticated principal, per-user tool allow-list, and constructor-injected audit writer. Request-supplied authentication flags and audit callbacks are not trusted.
+- Requires the tool to be explicitly enabled and present in the resolved principal's allow-list.
 - Requires explicit approval for high-risk tools.
 - Validates JSON-object inputs against the registered schema, including required fields, primitive types, bounds, and unknown-property rejection when configured.
 - Applies a 64 KiB input limit, a per-tool deadline capped at 30 seconds, and a 64 KiB JSON output limit.
@@ -29,6 +29,6 @@ Therefore:
 
 ## Current status
 
-The registry and agent orchestration path are protected by unit tests, but tests must still run in CI. Existing tool catalog entries are not proof that their adapters exist. The code-execution catalog entry remains marked `not_implemented`. No production tool execution is enabled by this change.
+The registry and agent orchestration path are protected by unit tests, but tests must still run in CI. No trusted server authorization resolver or durable audit writer is wired into the production HTTP server yet, so the runtime fails closed and cannot execute tools. Existing tool catalog entries are not proof that their adapters exist. The code-execution catalog entry remains marked `not_implemented`. No production tool execution is enabled by this change.
 
 The tool execution boundary does not change the AstraCoreLM production gate. `production_approved` remains false until independent model and system validation plus explicit human approval.
