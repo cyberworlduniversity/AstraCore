@@ -80,6 +80,10 @@ def certify(checkpoint_dir, corpus_dir):
     step = checkpoint.get('step')
     require(isinstance(epoch, int) and epoch > 0, 'checkpoint epoch is invalid')
     require(isinstance(step, int) and step > 0, 'checkpoint step is invalid')
+    finite_nonnegative(checkpoint.get('val_loss'), 'checkpoint.val_loss')
+    require(math.isclose(checkpoint['val_loss'], training.get('validation_loss', float('nan')),
+                         rel_tol=1e-7, abs_tol=1e-8),
+            'checkpoint validation loss mismatch')
     require(epoch == training.get('epoch') == evaluation.get('checkpoint_epoch'),
             'checkpoint epoch mismatch across artifacts')
     require(step == training.get('step') == evaluation.get('checkpoint_step'),
@@ -191,7 +195,7 @@ def main():
     if args.report:
         report_path = Path(args.report)
         report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(rendered + '\\n', encoding='utf-8')
+        report_path.write_text(rendered + '\n', encoding='utf-8')
     raise SystemExit(exit_code)
 
 
