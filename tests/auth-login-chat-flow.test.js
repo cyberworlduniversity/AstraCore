@@ -10,6 +10,7 @@ const { default: loginHandler } = await import('../api/auth/login.js');
 const { default: meHandler } = await import('../api/auth/me.js');
 const { default: logoutHandler } = await import('../api/auth/logout.js');
 const { default: apiHandler } = await import('../api/[...path].js');
+const { createSessionToken, sessionCookie } = await import('../server/auth.js');
 
 function responseCapture() {
   return {
@@ -117,6 +118,54 @@ test('login -> auth/me -> protected chat workspace API -> logout -> protected AP
     assert.equal(calls.filter((call) => call.url.includes('/auth/v1/token?grant_type=password')).length, 1);
     assert.equal(calls.filter((call) => call.url.endsWith('/auth/v1/logout')).length, 1);
     assert.equal(calls.filter((call) => call.url.includes('/rest/v1/astracore_revoked_sessions') && call.options.method === 'POST').length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test('expired access session refreshes before revocation lookup and continues to protected API', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const cookie = sessionCookie(createSessionToken(
+    'expired-access-token',
+    'valid-refresh-token',
+    supabaseUser,
+    0,
+    Date.now() + 60 * 60 * 1000,
+  )).split(';')[0];
+
+  globalThis.fetch = async (url, options = {}) => {
+    const target = String(url);
+    calls.push({ target, options });
+    if (target.includes('/auth/v1/token?grant_type=refresh_token')) {
+      assert.deepEqual(JSON.parse(options.body), { refresh_token: 'valid-refresh-token' });
+      return new Response(JSON.stringify({
+        access_token: 'fresh-access-token',
+        refresh_token: 'rotated-refresh-token',
+        expires_in: 3600,
+        user: supabaseUser,
+      }), { status: 200 });
+    }
+    if (target.includes('/rest/v1/astracore_revoked_sessions')) {
+      assert.equal(options.headers.Authorization, 'Bearer fresh-access-token');
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    if (target.includes('/rest/v1/astracore_conversations?')) {
+      assert.equal(options.headers.Authorization, 'Bearer fresh-access-token');
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    throw new Error('Unexpected Supabase request: ' + target);
+  };
+
+  try {
+    const response = responseCapture();
+    await apiHandler({ method: 'GET', url: '/api/conversations', headers: { cookie } }, response);
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(JSON.parse(response.body).conversations, []);
+    assert.ok(calls.findIndex((call) => call.target.includes('grant_type=refresh_token')) <
+      calls.findIndex((call) => call.target.includes('astracore_revoked_sessions')));
+    assert.ok(response.headers['set-cookie'], 'refreshed session cookie should be returned');
   } finally {
     globalThis.fetch = originalFetch;
   }
