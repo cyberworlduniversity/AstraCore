@@ -10,11 +10,13 @@ create index if not exists astracore_revoked_sessions_expiry_idx
 
 alter table public.astracore_revoked_sessions enable row level security;
 
+drop policy if exists astracore_revoked_sessions_self_select on public.astracore_revoked_sessions;
 create policy astracore_revoked_sessions_self_select
   on public.astracore_revoked_sessions
   for select to authenticated
   using ((select auth.uid()) = user_id);
 
+drop policy if exists astracore_revoked_sessions_self_insert on public.astracore_revoked_sessions;
 create policy astracore_revoked_sessions_self_insert
   on public.astracore_revoked_sessions
   for insert to authenticated
