@@ -37,9 +37,9 @@ This is a source review plus regression-test addition. It is not a penetration t
 
 ## Remaining work before public launch
 
-1. The session cookie is signed but not encrypted and contains Supabase access/refresh tokens. Prefer opaque server-side sessions or authenticated encryption with key rotation.
+1. New session cookies use AES-256-GCM authenticated encryption and a seven-day session lifetime. Existing signed cookies are temporarily accepted only for their original browser-cookie window; users will receive encrypted cookies after re-authentication or token refresh. Plan a future key-rotation mechanism before rotating ASTRA_SESSION_SECRET.
 2. Verify Supabase Auth email-confirmation settings, password policy, CAPTCHA/bot protection, and rate limits in the actual Supabase project.
-3. Test password login, signup/OTP, logout, session refresh, and OAuth in a real browser against the production deployment.
+3. Test password login, signup/OTP, logout/revocation, session refresh-cookie rotation, and OAuth in a real browser against the production deployment.
 4. Verify admin authorization independently on every admin API route; frontend hiding is not an authorization boundary.
 5. Complete mobile viewport, keyboard-only, screen-reader, and slow-network testing.
 6. Review third-party dependencies and run a separate authenticated security test.
@@ -51,3 +51,12 @@ This is a source review plus regression-test addition. It is not a penetration t
 - The available GitHub Actions run was still installing Python dependencies at the last inspection; no passing result is claimed.
 - Vercel preview checks are blocked by the account build-rate limit, so the live deployment was not verified.
 - No production secrets, accounts, user data, or deployment settings were changed.
+
+
+## Follow-up session hardening
+
+- New cookies use AES-256-GCM; authentication tags are verified before payload parsing.
+- Session lifetime is bounded to seven days, independently from the shorter Supabase access-token expiry, allowing expired access tokens to reach the refresh path.
+- Rotated Supabase refresh tokens are written back to the HttpOnly cookie on authenticated requests and `/api/auth/me`.
+- Logout attempts Supabase token revocation and always clears the browser cookie, even if remote revocation is unavailable.
+- Legacy signed cookies remain temporarily readable for compatibility until their browser Max-Age window ends; they are not encrypted and should disappear after reauthentication/expiry.
