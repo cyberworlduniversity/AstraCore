@@ -136,3 +136,30 @@ test('registry rejects tools without object input schemas', () => {
   const registry = new ToolRegistry();
   assert.throws(() => registry.register({ name: 'bad' }), /input schema/);
 });
+
+test('tool input rejects getters without invoking them', async () => {
+  const req = request();
+  let invoked = false;
+  const input = {};
+  Object.defineProperty(input, 'query', {
+    enumerable: true,
+    get() { invoked = true; return 'unsafe'; },
+  });
+  await assert.rejects(
+    executeToolWithPolicy(tool(), input, req),
+    /Accessors are not allowed/,
+  );
+  assert.equal(invoked, false);
+  assert.equal(req.events.length, 0);
+});
+
+test('tool input rejects prototype-pollution property names', async () => {
+  const req = request();
+  const input = { query: 'x' };
+  Object.defineProperty(input, '__proto__', { value: { polluted: true }, enumerable: true });
+  await assert.rejects(
+    executeToolWithPolicy(tool(), input, req),
+    /Unsafe property name/,
+  );
+  assert.equal(req.events.length, 0);
+});
