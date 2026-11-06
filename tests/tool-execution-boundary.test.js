@@ -26,6 +26,7 @@ function request(overrides = {}) {
   return {
     authenticated: true,
     userId: 'user-1',
+    allowedTools: ['lookup'],
     audit: async (event) => { events.push(event); },
     events,
     ...overrides,
@@ -127,7 +128,7 @@ test('registry exposes metadata only and delegates execution to the policy bound
   const req = request();
   const registry = new ToolRegistry({
     auditWriter: req.audit,
-    authorizeContext: async () => ({ authenticated: true, userId: 'user-1' }),
+    authorizeContext: async () => ({ authenticated: true, userId: 'user-1', allowedTools: ['lookup'] }),
   });
   registry.register(tool());
   assert.equal(registry.list()[0].name, 'lookup');
