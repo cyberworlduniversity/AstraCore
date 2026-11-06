@@ -121,8 +121,11 @@ def save_checkpoint(output, model, tokenizer, config, optimizer, epoch, step, va
         'step': step,
         'val_loss': val_loss,
     }, output / 'model.pt')
+    tokenizer_path = output / 'tokenizer.json'
+    tokenizer.save(tokenizer_path)
+    tokenizer_sha256 = hashlib.sha256(tokenizer_path.read_bytes()).hexdigest()
+    config.tokenizer_sha256 = tokenizer_sha256
     (output / 'config.json').write_text(json.dumps(config.to_dict(), indent=2) + '\n', encoding='utf-8')
-    tokenizer.save(output / 'tokenizer.json')
     (output / 'training_state.json').write_text(json.dumps({
         'status': 'trained',
         'checkpoint_selection': 'lowest_validation_loss',
