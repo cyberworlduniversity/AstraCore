@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 const required = ['ASTRACORE_RLS_TARGET', 'ASTRACORE_SUPABASE_URL', 'ASTRACORE_SUPABASE_ANON_KEY', 'ASTRACORE_RLS_USER_A_JWT', 'ASTRACORE_RLS_USER_B_JWT'];
 const missing = required.filter((name) => !process.env[name]);
@@ -140,7 +140,7 @@ try {
   const fileId = await create('astracore_cloud_files', {
     user_id: ownerId, storage_path: storagePath, filename: 'rls-test.txt',
     mime_type: 'text/plain', size_bytes: 25,
-    sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    sha256: createHash('sha256').update('temporary RLS test object').digest('hex'),
     status: 'uploaded',
   });
   created.push(['astracore_cloud_files', 'id', fileId]);
