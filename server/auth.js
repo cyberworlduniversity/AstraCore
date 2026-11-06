@@ -35,15 +35,16 @@ async function refreshSession(session){if(!session?.refreshToken)return null;try
 function sessionHash(accessToken){return createHash('sha256').update(String(accessToken)).digest('hex')}
 async function sessionRevoked(session){
  if(!session?.accessToken||!session?.user?.id)return false;
- const hash=sessionHash(session.accessToken);
- const rows=await sb(`/rest/v1/astracore_revoked_sessions?session_hash=eq.${hash}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=session_hash&limit=1`,{headers:{Authorization:`Bearer ${session.accessToken}`}});
+ const hashes=[session.accessToken,session.refreshToken].filter(Boolean).map(sessionHash);
+ const rows=await sb(`/rest/v1/astracore_revoked_sessions?session_hash=in.(${hashes.join(',')})&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=session_hash&limit=2`,{headers:{Authorization:`Bearer ${session.accessToken}`}});
  return Array.isArray(rows)&&rows.length>0;
 }
 export async function revokeSession(req){
  const session=readSessionToken(parseCookie(req,'astracore_session'));
  if(!session?.accessToken||!session?.user?.id)return false;
  const expiresAt=Number(session.sessionExpiresAt)||Date.now()+7*24*60*60*1000;
- await sb('/rest/v1/astracore_revoked_sessions',{method:'POST',headers:{Authorization:`Bearer ${session.accessToken}`,Prefer:'resolution=ignore-duplicates,return=minimal'},body:JSON.stringify({session_hash:sessionHash(session.accessToken),user_id:session.user.id,expires_at:new Date(expiresAt).toISOString()})});
+ const rows=[session.accessToken,session.refreshToken].filter(Boolean).map(token=>({session_hash:sessionHash(token),user_id:session.user.id,expires_at:new Date(expiresAt).toISOString()}));
+ await sb('/rest/v1/astracore_revoked_sessions',{method:'POST',headers:{Authorization:`Bearer ${session.accessToken}`,Prefer:'resolution=ignore-duplicates,return=minimal'},body:JSON.stringify(rows)});
  // Supabase revokes refresh tokens; the server-side denylist blocks this access token immediately.
  try{await sb('/auth/v1/logout',{method:'POST',headers:{Authorization:`Bearer ${session.accessToken}`}})}catch{}
  return true;
