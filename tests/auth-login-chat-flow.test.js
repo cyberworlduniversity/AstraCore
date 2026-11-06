@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 
 process.env.ASTRA_SESSION_SECRET = 'test-only-session-secret-with-sufficient-entropy';
 process.env.ASTRACORE_SUPABASE_URL = 'https://supabase.example.test';
@@ -170,6 +171,46 @@ test('expired access session refreshes before revocation lookup and continues to
     assert.ok(calls.findIndex((call) => call.target.includes('grant_type=refresh_token')) <
       calls.findIndex((call) => call.target.includes('astracore_revoked_sessions')));
     assert.ok(response.headers['set-cookie'], 'refreshed session cookie should be returned');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test('revoked refresh-token hash blocks replay after access-token refresh', async () => {
+  const originalFetch = globalThis.fetch;
+  const refreshToken = 'revoked-refresh-token';
+  const refreshHash = createHash('sha256').update(refreshToken).digest('hex');
+  const cookie = sessionCookie(createSessionToken(
+    'expired-access-token',
+    refreshToken,
+    supabaseUser,
+    0,
+    Date.now() + 60 * 60 * 1000,
+  )).split(';')[0];
+
+  globalThis.fetch = async (url, options = {}) => {
+    const target = String(url);
+    if (target.includes('/auth/v1/token?grant_type=refresh_token')) {
+      return new Response(JSON.stringify({
+        access_token: 'fresh-access-token-after-logout',
+        refresh_token: 'rotated-refresh-token',
+        expires_in: 3600,
+        user: supabaseUser,
+      }), { status: 200 });
+    }
+    if (target.includes('/rest/v1/astracore_revoked_sessions')) {
+      assert.ok(target.includes(refreshHash), 'lookup must include the old refresh-token hash');
+      return new Response(JSON.stringify([{ session_hash: refreshHash }]), { status: 200 });
+    }
+    throw new Error('Unexpected Supabase request: ' + target);
+  };
+
+  try {
+    const response = responseCapture();
+    await apiHandler({ method: 'GET', url: '/api/conversations', headers: { cookie } }, response);
+    assert.equal(response.statusCode, 401);
+    assert.match(JSON.parse(response.body).error, /Login required/);
   } finally {
     globalThis.fetch = originalFetch;
   }
