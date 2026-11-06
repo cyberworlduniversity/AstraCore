@@ -93,6 +93,7 @@ try {
     method: 'POST', headers: { Prefer: 'return=representation' },
     body: JSON.stringify({ user_id: ownerId, name: 'forged-' + randomUUID(), description: 'must be rejected by RLS' }),
   });
+  if (Array.isArray(forged.data) && forged.data[0]?.id) created.push(['astracore_projects', 'id', forged.data[0].id]);
   assert.ok(forged.status >= 400 || !Array.isArray(forged.data) || forged.data.length === 0, 'User B inserted a row claiming User A as owner.');
 
   const memoryId = await create('astracore_memory_records', {
