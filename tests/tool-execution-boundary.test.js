@@ -112,7 +112,7 @@ test('tool outputs are bounded and secrets are redacted', async () => {
 
   await assert.rejects(
     executeToolWithPolicy(tool({ execute: async () => ({ data: 'x'.repeat(70 * 1024) }) }), { query: 'x' }, req),
-    /Tool output exceeds/,
+    (error) => error.status === 413,
   );
   assert.equal(req.events.at(-1).event, 'tool.failed');
 });
