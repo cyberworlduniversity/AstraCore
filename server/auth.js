@@ -32,8 +32,33 @@ async function sb(path,options={}){if(!SUPABASE_URL||!SUPABASE_KEY)throw Object.
 function publicUser(data){return{id:data.id,email:normalizeEmail(data.email),name:String(data.user_metadata?.name||data.user_metadata?.full_name||data.email?.split('@')[0]||'').slice(0,80),provider:data.app_metadata?.provider||'password',isAdmin:isAdmin(data)}}
 async function userFromToken(accessToken){return publicUser(await sb('/auth/v1/user',{headers:{Authorization:`Bearer ${accessToken}`}}))}
 async function refreshSession(session){if(!session?.refreshToken)return null;try{const data=await sb('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:JSON.stringify({refresh_token:session.refreshToken})});if(!data.access_token||!data.user)return null;const user=publicUser(data.user);return{user,token:makeSession(data.access_token,data.refresh_token||session.refreshToken,user,data.expires_in,session.sessionExpiresAt||Date.now()+7*24*60*60*1000),accessToken:data.access_token}}catch{return null}}
-export async function revokeSession(req){const session=readSessionToken(parseCookie(req,'astracore_session'));if(!session?.accessToken)return false;try{await sb('/auth/v1/logout',{method:'POST',headers:{Authorization:`Bearer ${session.accessToken}`}});return true}catch(error){const refreshed=await refreshSession(session);if(!refreshed?.accessToken)throw error;await sb('/auth/v1/logout',{method:'POST',headers:{Authorization:`Bearer ${refreshed.accessToken}`}});return true}}
-export async function currentUser(req){const signed=readSessionToken(parseCookie(req,'astracore_session'));if(!signed)return null;try{return await userFromToken(signed.accessToken)}catch{const refreshed=await refreshSession(signed);if(!refreshed)return null;req.astracoreRefreshedSession=refreshed.token;req.astracoreAccessToken=refreshed.accessToken;return refreshed.user}}
+function sessionHash(accessToken){return createHash('sha256').update(String(accessToken)).digest('hex')}
+async function sessionRevoked(session){
+ if(!session?.accessToken||!session?.user?.id)return false;
+ const hash=sessionHash(session.accessToken);
+ const rows=await sb(`/rest/v1/astracore_revoked_sessions?session_hash=eq.${hash}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=session_hash&limit=1`,{headers:{Authorization:`Bearer ${session.accessToken}`}});
+ return Array.isArray(rows)&&rows.length>0;
+}
+export async function revokeSession(req){
+ const session=readSessionToken(parseCookie(req,'astracore_session'));
+ if(!session?.accessToken||!session?.user?.id)return false;
+ const expiresAt=Number(session.sessionExpiresAt)||Date.now()+7*24*60*60*1000;
+ await sb('/rest/v1/astracore_revoked_sessions',{method:'POST',headers:{Authorization:`Bearer ${session.accessToken}`,Prefer:'return=minimal'},body:JSON.stringify({session_hash:sessionHash(session.accessToken),user_id:session.user.id,expires_at:new Date(expiresAt).toISOString()})});
+ // Supabase revokes refresh tokens; the server-side denylist blocks this access token immediately.
+ try{await sb('/auth/v1/logout',{method:'POST',headers:{Authorization:`Bearer ${session.accessToken}`}})}catch{}
+ return true;
+}
+export async function currentUser(req){
+ const signed=readSessionToken(parseCookie(req,'astracore_session'));
+ if(!signed)return null;
+ // Fail closed if the revocation store is unavailable; never silently accept an unchecked session.
+ if(await sessionRevoked(signed))return null;
+ try{return await userFromToken(signed.accessToken)}catch{
+  const refreshed=await refreshSession(signed);if(!refreshed)return null;
+  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken}))return null;
+  req.astracoreRefreshedSession=refreshed.token;req.astracoreAccessToken=refreshed.accessToken;return refreshed.user
+ }
+}
 function sessionFromRequest(req){const signed=readSessionToken(parseCookie(req,'astracore_session'));return signed||null}
 export function supabaseAccessToken(req){const session=sessionFromRequest(req);return req.astracoreAccessToken||session?.accessToken||''}
 export async function supabaseUserRequest(req,path,options={}){const accessToken=supabaseAccessToken(req);if(!accessToken)throw Object.assign(new Error('Login required'),{status:401});return sb(path,{...options,headers:{Authorization:`Bearer ${accessToken}`,...(options.headers||{})}})}
