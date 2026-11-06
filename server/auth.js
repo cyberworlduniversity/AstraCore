@@ -32,8 +32,52 @@ async function sb(path,options={}){if(!SUPABASE_URL||!SUPABASE_KEY)throw Object.
 function publicUser(data){return{id:data.id,email:normalizeEmail(data.email),name:String(data.user_metadata?.name||data.user_metadata?.full_name||data.email?.split('@')[0]||'').slice(0,80),provider:data.app_metadata?.provider||'password',isAdmin:isAdmin(data)}}
 async function userFromToken(accessToken){return publicUser(await sb('/auth/v1/user',{headers:{Authorization:`Bearer ${accessToken}`}}))}
 async function refreshSession(session){if(!session?.refreshToken)return null;try{const data=await sb('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:JSON.stringify({refresh_token:session.refreshToken})});if(!data.access_token||!data.user)return null;const user=publicUser(data.user);return{user,token:makeSession(data.access_token,data.refresh_token||session.refreshToken,user,data.expires_in,session.sessionExpiresAt||Date.now()+7*24*60*60*1000),accessToken:data.access_token}}catch{return null}}
-export async function revokeSession(req){const session=readSessionToken(parseCookie(req,'astracore_session'));if(!session?.accessToken)return false;try{await sb('/auth/v1/logout',{method:'POST',headers:{Authorization:`Bearer ${session.accessToken}`}});return true}catch(error){const refreshed=await refreshSession(session);if(!refreshed?.accessToken)throw error;await sb('/auth/v1/logout',{method:'POST',headers:{Authorization:`Bearer ${refreshed.accessToken}`}});return true}}
-export async function currentUser(req){const signed=readSessionToken(parseCookie(req,'astracore_session'));if(!signed)return null;try{return await userFromToken(signed.accessToken)}catch{const refreshed=await refreshSession(signed);if(!refreshed)return null;req.astracoreRefreshedSession=refreshed.token;req.astracoreAccessToken=refreshed.accessToken;return refreshed.user}}
+function sessionHash(accessToken){return createHash('sha256').update(String(accessToken)).digest('hex')}
+async function sessionRevoked(session){
+ if(!session?.accessToken||!session?.user?.id)return false;
+ const hashes=[session.accessToken,session.refreshToken,session.previousAccessToken].filter(Boolean).map(sessionHash);
+ const rows=await sb(`/rest/v1/astracore_revoked_sessions?session_hash=in.(${hashes.join(',')})&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=session_hash&limit=2`,{headers:{Authorization:`Bearer ${session.accessToken}`}});
+ return Array.isArray(rows)&&rows.length>0;
+}
+export async function revokeSession(req){
+ const session=readSessionToken(parseCookie(req,'astracore_session'));
+ if(!session?.accessToken||!session?.user?.id)return false;
+ // An expired access JWT cannot write to PostgREST. Refresh first, then revoke both
+ // generations of tokens so a rotated refresh token cannot survive logout.
+ let active=session;
+ if(Number(session.expiresAt)>0&&Number(session.expiresAt)<=Date.now()){
+  const refreshed=await refreshSession(session);
+  if(!refreshed)throw Object.assign(new Error('Unable to refresh the session for secure logout.'),{status:503});
+  active={...session,accessToken:refreshed.accessToken,refreshToken:readSessionToken(refreshed.token)?.refreshToken||session.refreshToken};
+ }
+ const expiresAt=Number(session.sessionExpiresAt)||Date.now()+7*24*60*60*1000;
+ const rows=[session.accessToken,session.refreshToken,active.accessToken,active.refreshToken].filter(Boolean);
+ const uniqueRows=[...new Set(rows)].map(token=>({session_hash:sessionHash(token),user_id:session.user.id,expires_at:new Date(expiresAt).toISOString()}));
+ await sb('/rest/v1/astracore_revoked_sessions',{method:'POST',headers:{Authorization:`Bearer ${active.accessToken}`,Prefer:'resolution=ignore-duplicates,return=minimal'},body:JSON.stringify(uniqueRows)});
+ // Durable denylist protection is written before asking Supabase to revoke the refresh session.
+ try{await sb('/auth/v1/logout',{method:'POST',headers:{Authorization:`Bearer ${active.accessToken}`}})}catch{}
+ return true;
+}
+export async function currentUser(req){
+ const signed=readSessionToken(parseCookie(req,'astracore_session'));
+ if(!signed)return null;
+ // An expired access JWT cannot authenticate a PostgREST denylist lookup. Refresh it first;
+ // a revoked refresh token is rejected by Supabase, and the replacement token is then checked.
+ if(Number(signed.expiresAt)>0&&Number(signed.expiresAt)<=Date.now()){
+  const refreshed=await refreshSession(signed);if(!refreshed)return null;
+  const refreshedSession=readSessionToken(refreshed.token);
+  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken,refreshToken:refreshedSession?.refreshToken||signed.refreshToken,previousAccessToken:signed.accessToken}))return null;
+  req.astracoreRefreshedSession=refreshed.token;req.astracoreAccessToken=refreshed.accessToken;return refreshed.user;
+ }
+ // Fail closed if the revocation store is unavailable; never silently accept an unchecked session.
+ if(await sessionRevoked(signed))return null;
+ try{return await userFromToken(signed.accessToken)}catch{
+  const refreshed=await refreshSession(signed);if(!refreshed)return null;
+  const refreshedSession=readSessionToken(refreshed.token);
+  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken,refreshToken:refreshedSession?.refreshToken||signed.refreshToken,previousAccessToken:signed.accessToken}))return null;
+  req.astracoreRefreshedSession=refreshed.token;req.astracoreAccessToken=refreshed.accessToken;return refreshed.user
+ }
+}
 function sessionFromRequest(req){const signed=readSessionToken(parseCookie(req,'astracore_session'));return signed||null}
 export function supabaseAccessToken(req){const session=sessionFromRequest(req);return req.astracoreAccessToken||session?.accessToken||''}
 export async function supabaseUserRequest(req,path,options={}){const accessToken=supabaseAccessToken(req);if(!accessToken)throw Object.assign(new Error('Login required'),{status:401});return sb(path,{...options,headers:{Authorization:`Bearer ${accessToken}`,...(options.headers||{})}})}

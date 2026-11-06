@@ -1,4 +1,5 @@
 import { signup, sessionCookie } from '../../server/auth.js';
+import { rejectCrossOriginRequest } from '../../server/csrf.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -6,6 +7,7 @@ export default async function handler(req, res) {
     res.setHeader('allow', 'POST');
     return res.end(JSON.stringify({ error: 'Method not allowed' }));
   }
+  if (rejectCrossOriginRequest(req, res)) return;
   try {
     const body = typeof req.body === 'object' && req.body ? req.body : {};
     const result = await signup(body.email, body.password, body.name);

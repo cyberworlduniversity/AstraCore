@@ -74,11 +74,14 @@ jobs:
           node --check web/app.js
           node --check server/server.js
           node --check server/auth.js
+          node --check server/csrf.js
           node --check server/knowledge-api.js
           node --check server/embedding-service.js
           node --check src/core/isolated-python-worker.js
           node --check tests/isolated-python-worker.test.js
           node --check api/[...path].js
+          node --check api/admin/[...path].js
+          node --check api/auth/signup.js
           node --check api/auth/login.js
           node --check api/auth/logout.js
           node --check api/auth/me.js
