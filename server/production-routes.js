@@ -77,12 +77,12 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
 
   if (path === '/api/tools' && req.method === 'GET') {
     const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 20, 1), MAX_TOOL_LIMIT);
-    const rows = await supabaseUserRequest(req, `/rest/v1/astracore_tool_registry?select=name,description,input_schema,output_schema,permissions,risk_level,timeout_ms,authentication_requirements,status&order=name.asc&limit=${limit}`);
+    const rows = await supabaseUserRequest(req, `/rest/v1/astracore_tool_registry?select=name,description,status&order=name.asc&limit=${limit}`);
     return json(res, 200, { tools: rows });
   }
 
   if (path === '/api/models' && req.method === 'GET') {
-    const rows = await supabaseUserRequest(req, '/rest/v1/astracore_model_versions?select=id,model_id,display_name,architecture,status,parameter_count,vocab_size,context_length,embedding_dimension,layers,attention_heads,feed_forward_dimension,checkpoint_path,validation_loss,test_loss,perplexity,device,training_seed,training_metadata,created_at,updated_at&order=created_at.desc&limit=50');
+    const rows = await supabaseUserRequest(req, '/rest/v1/astracore_model_versions?select=id,model_id,display_name,architecture,status,parameter_count,vocab_size,context_length,embedding_dimension,layers,attention_heads,feed_forward_dimension,created_at,updated_at&order=created_at.desc&limit=50');
     return json(res, 200, { models: rows });
   }
 
