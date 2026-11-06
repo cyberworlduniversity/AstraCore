@@ -32,3 +32,5 @@ See `docs/CHECKPOINT_CERTIFICATION.md` for experimental checkpoint integrity ver
 See `docs/BEHAVIORAL_EVALUATION.md` for running the deterministic behavioral benchmark.
 
 See `docs/ADVERSARIAL_EVALUATION.md` for the local adversarial response evaluation suite.
+
+See `docs/TOOL_EXECUTION_SECURITY.md` for tool authorization, resource limits, audit requirements, and sandbox isolation boundaries.
