@@ -285,7 +285,10 @@ test('revoked refresh-token hash blocks replay after access-token refresh', asyn
       }), { status: 200 });
     }
     if (target.includes('/rest/v1/astracore_revoked_sessions')) {
-      assert.ok(target.includes(refreshHash), 'lookup must include the old refresh-token hash');\n      assert.ok(target.includes(createHash('sha256').update('fresh-access-token-after-logout').digest('hex')), 'lookup must include the new access-token hash');\n      assert.ok(target.includes(createHash('sha256').update('rotated-refresh-token').digest('hex')), 'lookup must include the rotated refresh-token hash');\n      assert.ok(target.includes(createHash('sha256').update('expired-access-token').digest('hex')), 'lookup must include the previous access-token hash');
+      assert.ok(target.includes(refreshHash), 'lookup must include the old refresh-token hash');
+      assert.ok(target.includes(createHash('sha256').update('fresh-access-token-after-logout').digest('hex')), 'lookup must include the new access-token hash');
+      assert.ok(target.includes(createHash('sha256').update('rotated-refresh-token').digest('hex')), 'lookup must include the rotated refresh-token hash');
+      assert.ok(target.includes(createHash('sha256').update('expired-access-token').digest('hex')), 'lookup must include the previous access-token hash');
       return new Response(JSON.stringify([{ session_hash: refreshHash }]), { status: 200 });
     }
     throw new Error('Unexpected Supabase request: ' + target);
