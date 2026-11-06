@@ -20,7 +20,7 @@ test('session token encrypts access and refresh tokens at rest in the browser co
 test('tampered or malformed encrypted session cookies are rejected', () => {
   const token = createSessionToken('access', 'refresh', { id: 'user-1' }, 3600);
   const parts = token.split('.');
-  parts[2] = parts[2].slice(0, -2) + (parts[2].endsWith('aa') ? 'bb' : 'aa');
+  parts[2] = (parts[2][0] === 'A' ? 'B' : 'A') + parts[2].slice(1);
   assert.equal(readSessionToken(parts.join('.')), null);
   assert.equal(readSessionToken('v2.not-valid'), null);
   assert.equal(readSessionToken(''), null);
