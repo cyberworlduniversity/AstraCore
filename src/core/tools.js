@@ -7,8 +7,9 @@ function freezeSchema(value) {
 }
 
 export class ToolRegistry {
-  constructor(definitions = []) {
+  constructor(definitions = [], { auditWriter } = {}) {
     this.tools = new Map();
+    this.auditWriter = auditWriter;
     for (const tool of definitions) this.register(tool);
   }
 
@@ -41,7 +42,7 @@ export class ToolRegistry {
       risk: registered.risk || registered.riskLevel || 'low',
       timeoutMs: registered.timeoutMs || registered.timeout_ms,
     };
-    return executeToolWithPolicy(tool, input, request);
+    return executeToolWithPolicy(tool, input, { ...request, audit: this.auditWriter });
   }
 }
 
