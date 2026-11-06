@@ -164,6 +164,7 @@ export class IsolatedPythonWorker {
         kill();
       };
       abortSignal?.addEventListener('abort', onAbort, { once: true });
+      if (abortSignal?.aborted) onAbort();
       timer = setTimeout(() => {
         timedOut = true;
         kill();
