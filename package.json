@@ -8,7 +8,8 @@
     "start": "node server/server.js",
     "train:demo": "node scripts/train-demo.js",
     "test": "node --test",
-    "test:rls": "node scripts/test-two-user-rls.js"
+    "test:rls": "node scripts/test-two-user-rls.js",
+    "test:api-rls": "node scripts/test-two-user-api-isolation.js"
   },
   "engines": {
     "node": "24.x"
