@@ -51,25 +51,62 @@ test('saved assistant lookup is constrained by message, conversation and owner I
   let captured;
   const result=await readIdempotentMessage({}, {id:'user-a'}, 'conversation-a',requestId,'assistant',async(_req,path)=>{captured=path;return [{id:idempotentMessageId(requestId,'assistant','user-a','conversation-a'),content:'saved answer'}]});
   assert.equal(result.content,'saved answer');
-  assert.match(captured,/id=eq\./);
-  assert.match(captured,/conversation_id=eq\.conversation-a/);
-  assert.match(captured,/user_id=eq\.user-a/);
+  assert.ok(captured.includes('id=eq.'));
+  assert.ok(captured.includes('conversation_id=eq.conversation-a'));
+  assert.ok(captured.includes('user_id=eq.user-a'));
 });
 
 test('both chat handlers require request IDs and replay a previously saved assistant answer',async()=>{
   const api=await readFile(new URL('../api/[...path].js',import.meta.url),'utf8');
   const server=await readFile(new URL('../server/server.js',import.meta.url),'utf8');
   for(const source of [api,server]){
-    assert.match(source,/body\.requestId/);
+    assert.ok(source.includes('body.requestId'));
     assert.match(source,/priorAssistant/);
     assert.match(source,/idempotent_replay:true/);
     assert.match(source,/resolution=ignore-duplicates/);
+    assert.ok(source.includes('savedUser.content!==message'));
+    assert.ok(source.includes('status:409') || source.includes('json(res,409'));
+    assert.match(source,/canonicalAssistant/);
   }
 });
 
 test('browser retry reuses the original request ID instead of creating another message',async()=>{
   const source=await readFile(new URL('../web/app.js',import.meta.url),'utf8');
-  assert.match(source,/requestId=retry\?\.requestId\|\|crypto\.randomUUID\(\)/);
-  assert.match(source,/sendMessage\(\{text,requestId,files,bubble:pending,button:retryButton\}\)/);
+  assert.ok(source.includes('requestId=retry?.requestId||crypto.randomUUID()'));
+  assert.ok(source.includes('sendMessage({text,requestId,files,bubble:pending,button:retryButton})'));
   assert.match(source,/requestId,maxNewTokens/);
 });
+
+test('concurrent duplicate message saves converge on one canonical row',async()=>{
+  const rows=new Map();
+  const request=async(_req,_path,options)=>{
+    const row=JSON.parse(options.body);
+    if(!rows.has(row.id)) rows.set(row.id,row);
+    return [];
+  };
+  const args=[{}, {id:'user-a'}, 'conversation-a', 'assistant', 'answer from attempt A', 'astracore-neural-a', {}, request, requestId];
+  const first=saveMessage(...args);
+  const second=saveMessage({}, {id:'user-a'}, 'conversation-a', 'assistant', 'answer from attempt B', 'astracore-neural-a', {}, request, requestId);
+  const [firstId,secondId]=await Promise.all([first,second]);
+  assert.equal(firstId,secondId);
+  assert.equal(rows.size,1);
+  assert.equal(rows.get(firstId).role,'assistant');
+  assert.ok(['answer from attempt A','answer from attempt B'].includes(rows.get(firstId).content));
+  const canonical=await readIdempotentMessage({}, {id:'user-a'}, 'conversation-a', requestId, 'assistant', async()=>[rows.get(firstId)]);
+  assert.equal(canonical.id,firstId);
+  assert.equal(canonical.content,rows.get(firstId).content);
+});
+
+test('lost-response retry can retrieve the already persisted assistant response',async()=>{
+  const id=idempotentMessageId(requestId,'assistant','user-a','conversation-a');
+  const persisted={id,role:'assistant',content:'answer saved before network timeout',model:'astracore-neural-a'};
+  let reads=0;
+  const recovered=await readIdempotentMessage({}, {id:'user-a'}, 'conversation-a', requestId, 'assistant', async(_req,path)=>{
+    reads++;
+    assert.ok(path.includes('user_id=eq.user-a'));
+    return [persisted];
+  });
+  assert.equal(reads,1);
+  assert.equal(recovered.content,'answer saved before network timeout');
+});
+
