@@ -58,3 +58,12 @@ test('file previews are not falsely sent as analyzed attachments', () => {
   assert.ok(!app.includes('attachments:files.map('));
   assert.ok(app.includes("const type=f.type||'application/octet-stream'"));
 });
+
+test('auth form locks duplicate submissions and validates the returned session user', () => {
+  assert.ok(auth.includes('let submitting=false'));
+  assert.ok(auth.includes('if(submitting)return'));
+  assert.ok(auth.includes('submitButton.disabled=true'));
+  assert.ok(auth.includes('finally{submitting=false;submitButton.disabled=false}'));
+  assert.ok(auth.includes('Authentication succeeded without a user session.'));
+  assert.ok(auth.includes('if(!/^[0-9]{6}$/.test(code))'));
+});
