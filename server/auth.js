@@ -35,7 +35,7 @@ async function refreshSession(session){if(!session?.refreshToken)return null;try
 function sessionHash(accessToken){return createHash('sha256').update(String(accessToken)).digest('hex')}
 async function sessionRevoked(session){
  if(!session?.accessToken||!session?.user?.id)return false;
- const hashes=[session.accessToken,session.refreshToken].filter(Boolean).map(sessionHash);
+ const hashes=[session.accessToken,session.refreshToken,session.previousAccessToken].filter(Boolean).map(sessionHash);
  const rows=await sb(`/rest/v1/astracore_revoked_sessions?session_hash=in.(${hashes.join(',')})&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=session_hash&limit=2`,{headers:{Authorization:`Bearer ${session.accessToken}`}});
  return Array.isArray(rows)&&rows.length>0;
 }
@@ -65,14 +65,14 @@ export async function currentUser(req){
  // a revoked refresh token is rejected by Supabase, and the replacement token is then checked.
  if(Number(signed.expiresAt)>0&&Number(signed.expiresAt)<=Date.now()){
   const refreshed=await refreshSession(signed);if(!refreshed)return null;
-  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken}))return null;
+  const refreshedSession=readSessionToken(refreshed.token);\n  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken,refreshToken:refreshedSession?.refreshToken||signed.refreshToken,previousAccessToken:signed.accessToken}))return null;
   req.astracoreRefreshedSession=refreshed.token;req.astracoreAccessToken=refreshed.accessToken;return refreshed.user;
  }
  // Fail closed if the revocation store is unavailable; never silently accept an unchecked session.
  if(await sessionRevoked(signed))return null;
  try{return await userFromToken(signed.accessToken)}catch{
   const refreshed=await refreshSession(signed);if(!refreshed)return null;
-  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken}))return null;
+  const refreshedSession=readSessionToken(refreshed.token);\n  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken,refreshToken:refreshedSession?.refreshToken||signed.refreshToken,previousAccessToken:signed.accessToken}))return null;
   req.astracoreRefreshedSession=refreshed.token;req.astracoreAccessToken=refreshed.accessToken;return refreshed.user
  }
 }
