@@ -47,10 +47,10 @@ export class ToolRegistry {
 
 export function defaultToolDefinitions() {
   return [
-    { name: 'file_search', description: 'Search user-owned indexed knowledge.', inputSchema: { type: 'object', properties: { query: { type: 'string', minLength: 1, maxLength: 1000 } }, required: ['query'], additionalProperties: false }, status: 'enabled', riskLevel: 'low' },
+    { name: 'file_search', description: 'Search user-owned indexed knowledge.', inputSchema: { type: 'object', properties: { query: { type: 'string', minLength: 1, maxLength: 1000 } }, required: ['query'], additionalProperties: false }, status: 'not_implemented', riskLevel: 'low' },
     { name: 'web_search', description: 'Search current public web information with citations.', inputSchema: { type: 'object' }, status: 'not_implemented', riskLevel: 'medium' },
     { name: 'calculator', description: 'Perform deterministic calculations.', inputSchema: { type: 'object' }, status: 'not_implemented', riskLevel: 'low' },
-    { name: 'code_execution', description: 'Run Python in an isolated sandbox.', inputSchema: { type: 'object' }, status: 'not_implemented', riskLevel: 'high' },
+    { name: 'code_execution', description: 'Run approved code in a separately isolated worker (not implemented).', inputSchema: { type: 'object' }, status: 'not_implemented', riskLevel: 'high' },
     { name: 'database_query', description: 'Run approved read-only structured data queries.', inputSchema: { type: 'object' }, status: 'not_implemented', riskLevel: 'high' },
     { name: 'image_analysis', description: 'Analyze successfully processed images.', inputSchema: { type: 'object' }, status: 'not_implemented', riskLevel: 'medium' },
   ];
