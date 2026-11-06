@@ -21,11 +21,7 @@ function setup() {
     },
     execute: async ({ query }) => ({ result: `found: ${query}` }),
   });
-  const engine = new AgentEngine({
-    toolRegistry: registry,
-    maxSteps: 2,
-    authorizeContext: async () => ({ authenticated: true, userId: 'user-1', allowedTools: ['safe_lookup'] }),
-  });
+  const engine = new AgentEngine({ toolRegistry: registry, maxSteps: 2 });
   const context = {
     authenticated: true,
     userId: 'user-1',
@@ -56,10 +52,7 @@ test('agent execution is blocked if caller identity or trusted audit writer is m
     inputSchema: { type: 'object', required: ['query'], additionalProperties: false, properties: { query: { type: 'string' } } },
     execute: async () => ({ result: 'should not run' }),
   });
-  const blockedEngine = new AgentEngine({
-    toolRegistry: registryWithoutAudit,
-    authorizeContext: async () => ({ authenticated: true, userId: 'user-1', allowedTools: ['safe_lookup'] }),
-  });
+  const blockedEngine = new AgentEngine({ toolRegistry: registryWithoutAudit });
   const result = await blockedEngine.run({
     task: 'run a tool',
     context,
