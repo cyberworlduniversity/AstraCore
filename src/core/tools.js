@@ -1,6 +1,11 @@
 import { executeToolWithPolicy } from './tool-execution-boundary.js';
 
-function freezeSchema(value) {\n  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;\n  for (const child of Object.values(value)) freezeSchema(child);\n  return Object.freeze(value);\n}\n\nexport class ToolRegistry {
+function freezeSchema(value) {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) freezeSchema(child);
+  return Object.freeze(value);
+}
+\nexport class ToolRegistry {
   constructor(definitions = []) {
     this.tools = new Map();
     for (const tool of definitions) this.register(tool);
