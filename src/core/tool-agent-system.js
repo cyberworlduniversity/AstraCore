@@ -8,7 +8,7 @@ function freezeSchema(value) {
 }
 
 export class ToolRegistry {
-  constructor({ auditWriter } = {}) { this.tools = new Map(); this.auditWriter = auditWriter; }
+  constructor({ auditWriter, authorizeContext } = {}) { this.tools = new Map(); this.auditWriter = auditWriter; this.authorizeContext = authorizeContext; }
 
   register(tool) {
     if (!tool?.name || typeof tool.name !== 'string') throw new Error('tool name required');
@@ -25,7 +25,10 @@ export class ToolRegistry {
   async execute(name, input, request = {}) {
     const tool = this.get(name);
     if (!tool) throw Object.assign(new Error('Tool not found'), { status: 404 });
-    return executeToolWithPolicy(tool, input, { ...request, audit: this.auditWriter });
+    if (typeof this.authorizeContext !== 'function') throw Object.assign(new Error('Trusted server authorization resolver is not configured'), { status: 503, code: 'AUTH_RESOLVER_UNAVAILABLE' });
+    const authorization = await this.authorizeContext(request);
+    if (!authorization || authorization.authenticated !== true || !authorization.userId) throw Object.assign(new Error('Trusted authenticated principal is required'), { status: 401, code: 'TOOL_NOT_AUTHORIZED' });
+    return executeToolWithPolicy(tool, input, { ...authorization, audit: this.auditWriter });
   }
 }
 
