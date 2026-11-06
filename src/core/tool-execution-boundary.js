@@ -93,7 +93,7 @@ function validateSchemaValue(value, schema, path, depth = 0) {
     for (const key of required) {
       if (!Object.prototype.hasOwnProperty.call(value, key)) fail('Missing required tool input: ' + path + '.' + key);
     }
-    if (schema.additionalProperties === false) {
+    if (schema.additionalProperties !== true) {
       for (const key of Object.keys(value)) {
         if (!Object.prototype.hasOwnProperty.call(properties, key)) fail('Unexpected tool input: ' + path + '.' + key);
       }
