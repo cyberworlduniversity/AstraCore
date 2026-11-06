@@ -123,11 +123,11 @@ test('audit writer is mandatory and fail-closed', async () => {
 });
 
 test('registry exposes metadata only and delegates execution to the policy boundary', async () => {
-  const registry = new ToolRegistry();
+  const req = request();
+  const registry = new ToolRegistry({ auditWriter: req.audit });
   registry.register(tool());
   assert.equal(registry.list()[0].name, 'lookup');
   assert.equal(Object.hasOwn(registry.list()[0], 'execute'), false);
-  const req = request();
   assert.deepEqual(await registry.execute('lookup', { query: 'hello' }, req), { answer: 'hello' });
   await assert.rejects(registry.execute('missing', {}, req), (error) => error.status === 404);
 });
