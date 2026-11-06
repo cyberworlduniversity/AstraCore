@@ -45,7 +45,7 @@ test('tool execution rejects unauthenticated callers before invoking adapter', a
   const req = request({ authenticated: false });
   await assert.rejects(
     executeToolWithPolicy(tool({ execute: async () => { called = true; } }), { query: 'x' }, req),
-    (error) => error.code === 'TOOL_NOT_AUTHORIZED' && error.status === 403,
+    (error) => error.code === 'TOOL_NOT_AUTHORIZED' && error.status === 401,
   );
   assert.equal(called, false);
   assert.equal(req.events.length, 0);
@@ -117,7 +117,7 @@ test('tool outputs are bounded and secrets are redacted', async () => {
 
 test('audit writer is mandatory and fail-closed', async () => {
   await assert.rejects(
-    executeToolWithPolicy(tool(), { query: 'x' }, { authenticated: true }),
+    executeToolWithPolicy(tool(), { query: 'x' }, { authenticated: true, userId: 'user-1' }),
     (error) => error.code === 'AUDIT_UNAVAILABLE' && error.status === 503,
   );
 });
