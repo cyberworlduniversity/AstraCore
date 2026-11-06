@@ -83,6 +83,8 @@ jobs:
           node --check api/admin/[...path].js
           node --check api/auth/signup.js
           node --check api/auth/login.js
+          node --check api/auth/resend-verification.js
+          node --check tests/auth-resend-verification.test.js
           node --check api/auth/logout.js
           node --check api/auth/me.js
           node --check tests/auth-session-endpoints.test.js
