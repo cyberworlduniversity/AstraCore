@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual, createHash, createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 const SUPABASE_URL=(process.env.ASTRACORE_SUPABASE_URL||process.env.SUPABASE_URL||'').replace(/\/$/,'');
 const SUPABASE_KEY=process.env.ASTRACORE_SUPABASE_KEY||process.env.SUPABASE_PUBLISHABLE_KEY||'';
 const SESSION_SECRET=process.env.ASTRA_SESSION_SECRET||'';
@@ -10,10 +10,20 @@ function encode(v){return Buffer.from(JSON.stringify(v)).toString('base64url')}
 function decode(v){try{return JSON.parse(Buffer.from(v,'base64url').toString('utf8'))}catch{return null}}
 function secret(){if(SESSION_SECRET)return SESSION_SECRET;if(isProduction)throw Object.assign(new Error('AstraCore session security is not configured. Set ASTRA_SESSION_SECRET in the deployment environment.'),{status:503});return 'local-development-only-astracore-session-secret'}
 function sign(v){return createHmac('sha256',secret()).update(v).digest('hex')}
-function makeSigned(v){const p=encode(v);return `${p}.${sign(p)}`}
-function readSigned(v){const parts=String(v||'').split('.');if(parts.length!==2)return null;const[p,s]=parts;if(!p||!/^[a-f0-9]{64}$/i.test(s||''))return null;const expected=Buffer.from(sign(p),'hex');const actual=Buffer.from(s,'hex');if(actual.length!==expected.length||!timingSafeEqual(actual,expected))return null;const value=decode(p);return value&&Number(value.expiresAt||0)>Date.now()?value:null}
+function encryptionKey(){return createHash('sha256').update('AstraCore session encryption v2\\0').update(secret()).digest()}
+function sealSession(value){const iv=randomBytes(12);const cipher=createCipheriv('aes-256-gcm',encryptionKey(),iv);const ciphertext=Buffer.concat([cipher.update(JSON.stringify(value),'utf8'),cipher.final()]);return `v2.${iv.toString('base64url')}.${ciphertext.toString('base64url')}.${cipher.getAuthTag().toString('base64url')}`}
+export function createSessionToken(accessToken,refreshToken,user,expiresIn=3600,sessionExpiresAt=Date.now()+30*24*60*60*1000){return sealSession({accessToken,refreshToken,user,expiresAt:Date.now()+Math.max(60,Number(expiresIn)-30)*1000,sessionExpiresAt})}
+export function readSessionToken(token){
+ const value=String(token||'');
+ if(value.startsWith('v2.')){
+  const parts=value.split('.');if(parts.length!==4)return null;
+  try{const iv=Buffer.from(parts[1],'base64url'),ciphertext=Buffer.from(parts[2],'base64url'),tag=Buffer.from(parts[3],'base64url');if(iv.length!==12||tag.length!==16||!ciphertext.length)return null;const decipher=createDecipheriv('aes-256-gcm',encryptionKey(),iv);decipher.setAuthTag(tag);const plain=Buffer.concat([decipher.update(ciphertext),decipher.final()]).toString('utf8');const data=JSON.parse(plain);return data&&Number(data.sessionExpiresAt)>Date.now()?data:null}catch{return null}
+ }
+ // Temporary compatibility for existing signed cookies. The browser cookie itself has a seven-day Max-Age.
+ const parts=value.split('.');if(parts.length!==2)return null;const[p,s]=parts;if(!p||!/^[a-f0-9]{64}$/i.test(s||''))return null;const expected=Buffer.from(sign(p),'hex');const actual=Buffer.from(s,'hex');if(actual.length!==expected.length||!timingSafeEqual(actual,expected))return null;const legacy=decode(p);return legacy&&Number(legacy.expiresAt||0)+7*24*60*60*1000>Date.now()?legacy:null
+}
 function parseCookie(req,name){for(const part of(req.headers.cookie||'').split(';')){const[k,...v]=part.trim().split('=');if(k===name){try{return decodeURIComponent(v.join('='))}catch{return ''}}}return ''}
-function makeSession(accessToken,refreshToken,user,expiresIn=3600){return makeSigned({accessToken,refreshToken,user,expiresAt:Date.now()+Math.max(60,Number(expiresIn)-30)*1000})}
+function makeSession(accessToken,refreshToken,user,expiresIn=3600,sessionExpiresAt=Date.now()+30*24*60*60*1000){return createSessionToken(accessToken,refreshToken,user,expiresIn,sessionExpiresAt)}
 function cookieFlags(){return `Path=/; HttpOnly; ${isProduction?'Secure; ':''}SameSite=Lax; Max-Age=604800`}
 export function sessionCookie(token){return `astracore_session=${encodeURIComponent(token)}; ${cookieFlags()}`}
 export function clearSessionCookie(){return `astracore_session=; ${cookieFlags()}; Max-Age=0`}
@@ -21,9 +31,9 @@ export function isAdmin(user){return Boolean(user&&normalizeEmail(user.email)===
 async function sb(path,options={}){if(!SUPABASE_URL||!SUPABASE_KEY)throw Object.assign(new Error('AstraCore Supabase authentication is not configured on this deployment. Set ASTRACORE_SUPABASE_URL and ASTRACORE_SUPABASE_KEY.'),{status:503});const headers={apikey:SUPABASE_KEY,'content-type':'application/json',...(options.headers||{})};const r=await fetch(`${SUPABASE_URL}${path}`,{...options,headers});const text=await r.text();let data={};try{data=text?JSON.parse(text):{}}catch{data={message:text}}if(!r.ok)throw Object.assign(new Error(data.msg||data.message||data.error_description||data.error||'Supabase request failed'),{status:r.status});return data}
 function publicUser(data){return{id:data.id,email:normalizeEmail(data.email),name:String(data.user_metadata?.name||data.user_metadata?.full_name||data.email?.split('@')[0]||'').slice(0,80),provider:data.app_metadata?.provider||'password',isAdmin:isAdmin(data)}}
 async function userFromToken(accessToken){return publicUser(await sb('/auth/v1/user',{headers:{Authorization:`Bearer ${accessToken}`}}))}
-async function refreshSession(session){if(!session?.refreshToken)return null;try{const data=await sb('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:JSON.stringify({refresh_token:session.refreshToken})});if(!data.access_token||!data.user)return null;const user=publicUser(data.user);return{user,token:makeSession(data.access_token,data.refresh_token||session.refreshToken,user,data.expires_in),accessToken:data.access_token}}catch{return null}}
-export async function currentUser(req){const signed=readSigned(parseCookie(req,'astracore_session'));if(!signed)return null;try{return await userFromToken(signed.accessToken)}catch{const refreshed=await refreshSession(signed);if(!refreshed)return null;req.astracoreRefreshedSession=refreshed.token;req.astracoreAccessToken=refreshed.accessToken;return refreshed.user}}
-function sessionFromRequest(req){const signed=readSigned(parseCookie(req,'astracore_session'));return signed||null}
+async function refreshSession(session){if(!session?.refreshToken)return null;try{const data=await sb('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:JSON.stringify({refresh_token:session.refreshToken})});if(!data.access_token||!data.user)return null;const user=publicUser(data.user);return{user,token:makeSession(data.access_token,data.refresh_token||session.refreshToken,user,data.expires_in,session.sessionExpiresAt||Date.now()+30*24*60*60*1000),accessToken:data.access_token}}catch{return null}}
+export async function revokeSession(req){const session=readSessionToken(parseCookie(req,'astracore_session'));if(!session?.accessToken)return false;await sb('/auth/v1/logout',{method:'POST',headers:{Authorization:`Bearer ${session.accessToken}`}});return true}\nexport async function currentUser(req){const signed=readSessionToken(parseCookie(req,'astracore_session'));if(!signed)return null;try{return await userFromToken(signed.accessToken)}catch{const refreshed=await refreshSession(signed);if(!refreshed)return null;req.astracoreRefreshedSession=refreshed.token;req.astracoreAccessToken=refreshed.accessToken;return refreshed.user}}
+function sessionFromRequest(req){const signed=readSessionToken(parseCookie(req,'astracore_session'));return signed||null}
 export function supabaseAccessToken(req){const session=sessionFromRequest(req);return req.astracoreAccessToken||session?.accessToken||''}
 export async function supabaseUserRequest(req,path,options={}){const accessToken=supabaseAccessToken(req);if(!accessToken)throw Object.assign(new Error('Login required'),{status:401});return sb(path,{...options,headers:{Authorization:`Bearer ${accessToken}`,...(options.headers||{})}})}
 async function authResult(data){if(!data.user)return{user:null,token:null};const user=publicUser(data.user);return{user,token:data.access_token?makeSession(data.access_token,data.refresh_token,user,data.expires_in):null}}
