@@ -65,7 +65,7 @@ test('logout refreshes an expired access token before revoking the session', asy
     throw new Error('Unexpected auth request');
   };
   try {
-    const token = auth.createSessionToken('expired-access', 'refresh-token-a', { id: 'user-a', email: 'a@example.test' });
+    const token = auth.createSessionToken('expired-access', 'refresh-token-a', { id: 'user-a', email: 'a@example.test' }, -120);
     const req = { method: 'POST', headers: { cookie: 'astracore_session=' + encodeURIComponent(token) } };
     const res = responseCapture();
     await logoutHandler(req, res);
@@ -97,7 +97,7 @@ test('auth/me persists the rotated cookie after refreshing an expired access tok
     throw new Error('Unexpected auth request');
   };
   try {
-    const token = auth.createSessionToken('expired-access', 'old-refresh', { id: 'user-a', email: 'a@example.test' });
+    const token = auth.createSessionToken('expired-access', 'old-refresh', { id: 'user-a', email: 'a@example.test' }, -120);
     const req = { method: 'GET', headers: { cookie: 'astracore_session=' + encodeURIComponent(token) } };
     const res = responseCapture();
     await meHandler(req, res);
