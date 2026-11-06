@@ -81,3 +81,26 @@ test('tools endpoint returns registry data without executing a tool', async () =
   assert.equal(res.status, 200);
   assert.equal(res.body.tools[0].name, 'calculator');
 });
+
+
+test('tools endpoint exposes only safe display metadata to regular users', async () => {
+  let path = '';
+  const res = await route({ method: 'GET', path: '/api/tools', request: async (_req, requestPath) => {
+    path = requestPath;
+    return [{ name: 'calculator', description: 'Basic arithmetic', status: 'not_implemented' }];
+  } });
+  assert.equal(res.status, 200);
+  assert.match(path, /select=name,description,status/);
+  assert.doesNotMatch(path, /input_schema|output_schema|permissions|authentication_requirements/);
+});
+
+test('models endpoint does not expose checkpoint paths or training metadata to regular users', async () => {
+  let path = '';
+  const res = await route({ method: 'GET', path: '/api/models', request: async (_req, requestPath) => {
+    path = requestPath;
+    return [{ id: 'm1', display_name: 'AstraCore A', status: 'experimental' }];
+  } });
+  assert.equal(res.status, 200);
+  assert.match(path, /select=id,model_id,display_name,architecture,status/);
+  assert.doesNotMatch(path, /checkpoint_path|training_metadata|training_seed|device/);
+});

@@ -10,7 +10,7 @@ export async function systemRoute({ req, res, url, user, json, supabaseUserReque
   if (path === '/api/system/status' && req.method === 'GET') {
     const [models, tools, evaluations] = await Promise.all([
       supabaseUserRequest(req, '/rest/v1/astracore_model_versions?select=id,model_id,display_name,status,perplexity,created_at&order=created_at.desc&limit=20'),
-      supabaseUserRequest(req, '/rest/v1/astracore_tool_registry?select=name,status,risk_level,permissions&order=name.asc&limit=50'),
+      supabaseUserRequest(req, '/rest/v1/astracore_tool_registry?select=name,status&order=name.asc&limit=50'),
       supabaseUserRequest(req, '/rest/v1/astracore_evaluation_runs?select=id,status,overall_score,created_at&order=created_at.desc&limit=10')
     ]);
     return json(res, 200, {
