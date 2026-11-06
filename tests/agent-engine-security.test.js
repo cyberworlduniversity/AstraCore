@@ -4,7 +4,8 @@ import { AgentEngine } from '../src/core/agent-engine.js';
 import { ToolRegistry } from '../src/core/tool-agent-system.js';
 
 function setup() {
-  const registry = new ToolRegistry();
+  const events = [];
+  const registry = new ToolRegistry({ auditWriter: async (event) => events.push(event) });
   registry.register({
     name: 'safe_lookup',
     enabled: true,
@@ -17,13 +18,11 @@ function setup() {
     },
     execute: async ({ query }) => ({ result: `found: ${query}` }),
   });
-  const events = [];
   const engine = new AgentEngine({ toolRegistry: registry, maxSteps: 2 });
   const context = {
     authenticated: true,
     userId: 'user-1',
     allowedTools: ['safe_lookup'],
-    audit: async (event) => events.push(event),
   };
   return { engine, context, events };
 }
@@ -40,11 +39,18 @@ test('agent execution delegates through the policy-enforced registry', async () 
   assert.deepEqual(events.map((event) => event.event), ['tool.started', 'tool.completed']);
 });
 
-test('agent execution is blocked if caller identity or audit is missing', async () => {
-  const { engine } = setup();
-  const result = await engine.run({
+test('agent execution is blocked if caller identity or trusted audit writer is missing', async () => {
+  const { engine, context } = setup();
+  const registryWithoutAudit = new ToolRegistry();
+  registryWithoutAudit.register({
+    name: 'safe_lookup', enabled: true, risk: 'low',
+    inputSchema: { type: 'object', required: ['query'], additionalProperties: false, properties: { query: { type: 'string' } } },
+    execute: async () => ({ result: 'should not run' }),
+  });
+  const blockedEngine = new AgentEngine({ toolRegistry: registryWithoutAudit });
+  const result = await blockedEngine.run({
     task: 'run a tool',
-    context: { authenticated: true },
+    context,
     toolCalls: [{ name: 'safe_lookup', input: { query: 'x' } }],
   });
   assert.equal(result.status, 'blocked');
