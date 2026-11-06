@@ -58,3 +58,18 @@ test('conversation list, lookup, and delete queries include the authenticated ow
   assert.ok(source.includes('/rest/v1/astracore_conversations?id=eq.${encodeURIComponent(conversationId)}&user_id=eq.${encodeURIComponent(user.id)}'));
   assert.ok(source.includes('/rest/v1/astracore_conversations?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(user.id)}'));
 });
+
+test('knowledge delete stops with not-found when the authenticated owner does not own the document', async () => {
+  let calls = 0;
+  const res = await runKnowledgeRoute({
+    method: 'DELETE', path: '/api/knowledge/00000000-0000-4000-8000-000000000099',
+    user: { id: 'user-a' },
+    request: async (_req, path) => {
+      calls += 1;
+      assert.match(path, /user_id=eq\.user-a/);
+      return [];
+    },
+  });
+  assert.equal(res.status, 404);
+  assert.equal(calls, 1, 'must not attempt chunk, document, or source deletion');
+});
