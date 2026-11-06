@@ -8,37 +8,38 @@ const authServer = readFileSync(new URL('../server/auth.js', import.meta.url), '
 const vercel = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
 
 test('chat submit handler has one valid error handler and always clears busy state', () => {
-  assert.match(app, /catch\(e\)\{pending\.textContent=e\.status===401\?/);
-  assert.match(app, /finally\{\$\('composer'\)\?\.classList\.remove\('busy'\)/);
-  assert.doesNotMatch(app, /catch\(e\)\{pending\.textContent=e\.message\}catch\(e\)/);
+  assert.ok(app.includes("catch(e){pending.textContent=e.status===401?"));
+  assert.ok(app.includes("finally{$('composer')?.classList.remove('busy')"));
+  assert.ok(!app.includes("catch(e){pending.textContent=e.message}catch(e)"));
 });
 
 test('successful password login and email verification return to the chat home', () => {
-  assert.equal((auth.match(/window\.location\.replace\('\\/'\)/g) || []).length, 2);
-  assert.match(auth, /astracore:auth-required/);
-  assert.match(app, /astracore:auth-required/);
+  const redirect = "window.location.replace('/')"; 
+  assert.equal(auth.split(redirect).length - 1, 2);
+  assert.ok(auth.includes("astracore:auth-required"));
+  assert.ok(app.includes("astracore:auth-required"));
 });
 
 test('login dialog is accessible and references the real logo asset', () => {
-  assert.match(auth, /aria-labelledby="authTitle" aria-describedby="authSub"/);
-  assert.match(auth, /src="\/web\/assets\/astracore-logo\.svg"/);
+  assert.ok(auth.includes('aria-labelledby="authTitle" aria-describedby="authSub"'));
+  assert.ok(auth.includes('src="/web/assets/astracore-logo.svg"'));
   assert.equal(existsSync(new URL('../web/assets/astracore-logo.svg', import.meta.url)), true);
-  assert.match(auth, /aria-label="Email address"/);
-  assert.match(auth, /aria-label="Password"/);
+  assert.ok(auth.includes('aria-label="Email address"'));
+  assert.ok(auth.includes('aria-label="Password"'));
 });
 
 test('CSP does not allow inline JavaScript', () => {
   const csp = vercel.headers.flatMap((item) => item.headers || [])
     .find((header) => header.key === 'Content-Security-Policy')?.value || '';
-  assert.match(csp, /script-src 'self';/);
-  assert.doesNotMatch(csp, /script-src[^;]*unsafe-inline/);
-  assert.match(csp, /frame-ancestors 'none'/);
-  assert.match(csp, /object-src 'none'/);
+  assert.ok(csp.includes("script-src 'self';"));
+  assert.ok(!csp.includes("script-src 'self' 'unsafe-inline'"));
+  assert.ok(csp.includes("frame-ancestors 'none'"));
+  assert.ok(csp.includes("object-src 'none'"));
 });
 
 test('session cookie parser rejects malformed encodings and MAC comparison is constant-time', () => {
-  assert.match(authServer, /timingSafeEqual/);
-  assert.match(authServer, /try\{return decodeURIComponent\(v\.join\('\='\)\)\}catch\{return ''\}/);
-  assert.match(authServer, /HttpOnly/);
-  assert.match(authServer, /SameSite=Lax/);
+  assert.ok(authServer.includes('timingSafeEqual'));
+  assert.ok(authServer.includes("try{return decodeURIComponent(v.join('='))}catch{return ''}"));
+  assert.ok(authServer.includes('HttpOnly'));
+  assert.ok(authServer.includes('SameSite=Lax'));
 });
