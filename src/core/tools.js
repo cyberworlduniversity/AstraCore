@@ -36,7 +36,11 @@ export class ToolRegistry {
   }
 
   async execute(name, input, request = {}) {
-    const registered = this.assertAllowed(name, request);
+    const registered = this.get(name);
+    if (!registered) throw Object.assign(new Error('Unknown tool'), { status: 404 });
+    if (registered.status === 'not_implemented' || registered.status === 'disabled') {
+      throw Object.assign(new Error(name + ' is NOT IMPLEMENTED'), { status: 501 });
+    }
     const tool = {
       ...registered,
       enabled: registered.status === 'enabled',
