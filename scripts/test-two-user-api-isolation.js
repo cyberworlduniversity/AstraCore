@@ -121,6 +121,37 @@ try {
   const conversationId = await createConversation(a.user.id);
   cleanup.push(async () => app(a, '/api/conversations/' + encodeURIComponent(conversationId), { method: 'DELETE' }));
 
+  const health = await app(a, '/api/health');
+  if (health.status === 200 && health.data.ready === true) {
+    const chat = await app(a, '/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message: 'AstraCore API isolation smoke test ' + randomUUID(), maxNewTokens: 4 }),
+    });
+    assert.equal(chat.status, 200, 'Production-ready staging chat request failed.');
+    assert.ok(chat.data.conversationId, 'Chat did not return its conversation ID.');
+    const chatConversationId = chat.data.conversationId;
+    cleanup.push(async () => app(a, '/api/conversations/' + encodeURIComponent(chatConversationId), { method: 'DELETE' }));
+    const ownerChat = await app(a, '/api/conversations/' + encodeURIComponent(chatConversationId));
+    assert.equal(ownerChat.status, 200, 'Owner cannot read conversation created by chat.');
+    const foreignChat = await app(b, '/api/conversations/' + encodeURIComponent(chatConversationId));
+    assert.equal(foreignChat.status, 403, 'User B can read conversation created by User A chat.');
+    console.log('PASS chat: new conversation and messages remain scoped to the authenticated owner.');
+  } else {
+    const beforeChat = await app(a, '/api/conversations');
+    const blockedChat = await app(a, '/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message: 'Model gate test ' + randomUUID() }),
+    });
+    assert.equal(blockedChat.status, 503, 'Chat should remain unavailable while no production-ready checkpoint is loaded.');
+    const afterChat = await app(a, '/api/conversations');
+    assert.deepEqual(
+      afterChat.data.conversations.map((row) => row.id).sort(),
+      beforeChat.data.conversations.map((row) => row.id).sort(),
+      'Unavailable chat created a conversation before the production model gate.',
+    );
+    console.log('PASS chat gate: unavailable model returns 503 without creating a conversation; generation isolation remains untested.');
+  }
+
   const bConversations = await app(b, '/api/conversations');
   assert.equal(bConversations.status, 200);
   assert.ok(!bConversations.data.conversations.some((row) => row.id === conversationId), 'User B conversation list leaked User A conversation.');
