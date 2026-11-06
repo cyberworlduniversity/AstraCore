@@ -70,7 +70,7 @@ export async function knowledgeRoute({ req, res, url, user, readBody, json, supa
   }
 
   if (req.method === 'GET' && url.pathname === '/api/knowledge') {
-    const rows = await request('/rest/v1/astracore_knowledge_documents?user_id=eq.${encodeURIComponent(user.id)}&select=id,title,source,document_type,language,status,tags,content_hash,metadata,created_at,updated_at&order=updated_at.desc&limit=100');
+    const rows = await request(`/rest/v1/astracore_knowledge_documents?user_id=eq.${encodeURIComponent(user.id)}&select=id,title,source,document_type,language,status,tags,content_hash,metadata,created_at,updated_at&order=updated_at.desc&limit=100`);
     return json(res, 200, { documents: rows });
   }
 
