@@ -129,6 +129,59 @@ test('login -> auth/me -> protected chat workspace API -> logout -> protected AP
 });
 
 
+test('logout refreshes expired access token and revokes old plus rotated token hashes', async () => {
+  const originalFetch = globalThis.fetch;
+  const oldAccess = 'expired-logout-access';
+  const oldRefresh = 'expired-logout-refresh';
+  const freshAccess = 'fresh-logout-access';
+  const rotatedRefresh = 'rotated-logout-refresh';
+  const expectedHashes = [oldAccess, oldRefresh, freshAccess, rotatedRefresh]
+    .map((token) => createHash('sha256').update(token).digest('hex'));
+  const cookie = sessionCookie(createSessionToken(
+    oldAccess, oldRefresh, supabaseUser, 0, Date.now() + 60 * 60 * 1000,
+  )).split(';')[0];
+  const calls = [];
+
+  globalThis.fetch = async (url, options = {}) => {
+    const target = String(url);
+    calls.push({ target, options });
+    if (target.includes('/auth/v1/token?grant_type=refresh_token')) {
+      assert.deepEqual(JSON.parse(options.body), { refresh_token: oldRefresh });
+      return new Response(JSON.stringify({
+        access_token: freshAccess,
+        refresh_token: rotatedRefresh,
+        expires_in: 3600,
+        user: supabaseUser,
+      }), { status: 200 });
+    }
+    if (target.includes('/rest/v1/astracore_revoked_sessions') && options.method === 'POST') {
+      assert.equal(options.headers.Authorization, 'Bearer ' + freshAccess);
+      const hashes = JSON.parse(options.body).map((row) => row.session_hash);
+      assert.deepEqual(new Set(hashes), new Set(expectedHashes));
+      return new Response(null, { status: 201 });
+    }
+    if (target.endsWith('/auth/v1/logout')) {
+      assert.equal(options.headers.Authorization, 'Bearer ' + freshAccess);
+      return new Response(null, { status: 204 });
+    }
+    throw new Error('Unexpected Supabase request: ' + target);
+  };
+
+  try {
+    const response = responseCapture();
+    await logoutHandler({ method: 'POST', headers: { cookie } }, response);
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(JSON.parse(response.body), { ok: true });
+    assert.match(response.headers['set-cookie'], /Max-Age=0/);
+    assert.ok(calls.findIndex((call) => call.target.includes('grant_type=refresh_token')) <
+      calls.findIndex((call) => call.target.includes('astracore_revoked_sessions')));
+    assert.ok(calls.findIndex((call) => call.target.includes('astracore_revoked_sessions')) <
+      calls.findIndex((call) => call.target.endsWith('/auth/v1/logout')));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('expired access session refreshes before revocation lookup and continues to protected API', async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
