@@ -152,7 +152,7 @@ export async function executeToolWithPolicy(tool, input, request = {}) {
     explicitApproval: request.explicitApproval === true,
   });
   if (!authorization.allowed) fail(authorization.reason, 403, 'TOOL_NOT_AUTHORIZED');
-  if (Array.isArray(request.allowedTools) && !request.allowedTools.includes(tool.name)) {
+  if (!Array.isArray(request.allowedTools) || !request.allowedTools.includes(tool.name)) {
     fail('Tool is not in the caller allow-list', 403, 'TOOL_NOT_ALLOWLISTED');
   }
 
