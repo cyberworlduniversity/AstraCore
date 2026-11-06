@@ -4,6 +4,10 @@ import json
 import math
 import random
 from pathlib import Path
+import sys
+
+# Make repository-root packages importable when this file is run directly.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import torch
 from torch.utils.data import DataLoader, Dataset
