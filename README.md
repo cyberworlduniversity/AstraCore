@@ -34,3 +34,6 @@ See `docs/BEHAVIORAL_EVALUATION.md` for running the deterministic behavioral ben
 See `docs/ADVERSARIAL_EVALUATION.md` for the local adversarial response evaluation suite.
 
 See `docs/TOOL_EXECUTION_SECURITY.md` for tool authorization, resource limits, audit requirements, and sandbox isolation boundaries.
+
+
+See `docs/ISOLATED_PYTHON_WORKER.md` for the fail-closed gVisor worker contract, container restrictions, and deployment requirements.
