@@ -125,7 +125,10 @@ test('audit writer is mandatory and fail-closed', async () => {
 
 test('registry exposes metadata only and delegates execution to the policy boundary', async () => {
   const req = request();
-  const registry = new ToolRegistry({ auditWriter: req.audit });
+  const registry = new ToolRegistry({
+    auditWriter: req.audit,
+    authorizeContext: async () => ({ authenticated: true, userId: 'user-1' }),
+  });
   registry.register(tool());
   assert.equal(registry.list()[0].name, 'lookup');
   assert.equal(Object.hasOwn(registry.list()[0], 'execute'), false);
@@ -181,7 +184,10 @@ test('public registry uses its injected audit writer and keeps code execution di
       },
       execute: async ({ query }) => ({ answer: query }),
     },
-  ], { auditWriter: req.audit });
+  ], {
+    auditWriter: req.audit,
+    authorizeContext: async () => ({ authenticated: true, userId: 'user-1' }),
+  });
   assert.deepEqual(await publicRegistry.execute('lookup', { query: 'ok' }, { authenticated: true, userId: 'user-1' }), { answer: 'ok' });
   const defaults = defaultToolDefinitions();
   assert.equal(defaults.find((item) => item.name === 'code_execution').status, 'not_implemented');
