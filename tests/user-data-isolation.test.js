@@ -56,8 +56,8 @@ test('conversation list, lookup, and delete queries include the authenticated ow
   const source = await readFile(new URL('../server/server.js', import.meta.url), 'utf8');
   assert.ok(source.includes("supabaseUserRequest(req,`/rest/v1/astracore_conversations?user_id=eq.${encodeURIComponent(user.id)}&select=id,title,model"));
   assert.ok(source.includes('/rest/v1/astracore_conversations?id=eq.${encodeURIComponent(conversationId)}&user_id=eq.${encodeURIComponent(user.id)}'));
-  const ownerScopedConversationIdLookups = source.match(/astracore_conversations\\?id=eq\\.\\$\\{encodeURIComponent\\(id\\)\\}&user_id=eq\\.\\$\\{encodeURIComponent\\(user\\.id\\)\\}&select=id,user_id/g) || [];
-  assert.equal(ownerScopedConversationIdLookups.length, 2, 'conversation read and delete must both be owner-scoped');
+  const ownerScopedConversationQuery = 'astracore_conversations?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(user.id)}&select=id,user_id';
+  assert.equal(source.split(ownerScopedConversationQuery).length - 1, 2, 'conversation read and delete must both be owner-scoped');
 });
 
 test('knowledge delete stops with not-found when the authenticated owner does not own the document', async () => {
