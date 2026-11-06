@@ -34,9 +34,11 @@ test('Vercel logout revokes the upstream Supabase session and clears the cookie'
     await logoutHandler(req, res);
     assert.equal(res.statusCode, 200);
     assert.match(res.headers['set-cookie'], /Max-Age=0/);
-    assert.equal(calls.length, 1);
-    assert.match(calls[0].url, /\/auth\/v1\/logout$/);
-    assert.equal(calls[0].options.headers.Authorization, 'Bearer access-token-a');
+    assert.equal(calls.length, 2);
+    assert.match(calls[0].url, /\/rest\/v1\/astracore_revoked_sessions$/);
+    assert.equal(calls[0].options.method, 'POST');
+    assert.match(calls[1].url, /\/auth\/v1\/logout$/);
+    assert.equal(calls[1].options.headers.Authorization, 'Bearer access-token-a');
   } finally {
     globalThis.fetch = originalFetch;
   }
