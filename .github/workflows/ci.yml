@@ -2,9 +2,9 @@ name: AstraCore CI
 
 on:
   push:
-    branches: [main, 'feat/**']
+    branches: [main, 'feat/**', 'fix/**']
   pull_request:
-    branches: [main, 'feat/**']
+    branches: [main, 'feat/**', 'fix/**']
 
 # CI is validation-only. It must never write to the repository.
 permissions:
@@ -49,6 +49,8 @@ jobs:
 
       - name: Syntax check runtime files
         run: |
+          node --check web/auth.js
+          node --check web/app.js
           node --check server/server.js
           node --check server/auth.js
           node --check server/knowledge-api.js

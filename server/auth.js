@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 const SUPABASE_URL=(process.env.ASTRACORE_SUPABASE_URL||process.env.SUPABASE_URL||'').replace(/\/$/,'');
 const SUPABASE_KEY=process.env.ASTRACORE_SUPABASE_KEY||process.env.SUPABASE_PUBLISHABLE_KEY||'';
 const SESSION_SECRET=process.env.ASTRA_SESSION_SECRET||'';
@@ -11,8 +11,8 @@ function decode(v){try{return JSON.parse(Buffer.from(v,'base64url').toString('ut
 function secret(){if(SESSION_SECRET)return SESSION_SECRET;if(isProduction)throw Object.assign(new Error('AstraCore session security is not configured. Set ASTRA_SESSION_SECRET in the deployment environment.'),{status:503});return 'local-development-only-astracore-session-secret'}
 function sign(v){return createHmac('sha256',secret()).update(v).digest('hex')}
 function makeSigned(v){const p=encode(v);return `${p}.${sign(p)}`}
-function readSigned(v){const[p,s]=String(v||'').split('.');if(!p||!s||s!==sign(p))return null;const value=decode(p);return value&&Number(value.expiresAt||0)>Date.now()?value:null}
-function parseCookie(req,name){for(const part of(req.headers.cookie||'').split(';')){const[k,...v]=part.trim().split('=');if(k===name)return decodeURIComponent(v.join('='))}return ''}
+function readSigned(v){const parts=String(v||'').split('.');if(parts.length!==2)return null;const[p,s]=parts;if(!p||!/^[a-f0-9]{64}$/i.test(s||''))return null;const expected=Buffer.from(sign(p),'hex');const actual=Buffer.from(s,'hex');if(actual.length!==expected.length||!timingSafeEqual(actual,expected))return null;const value=decode(p);return value&&Number(value.expiresAt||0)>Date.now()?value:null}
+function parseCookie(req,name){for(const part of(req.headers.cookie||'').split(';')){const[k,...v]=part.trim().split('=');if(k===name){try{return decodeURIComponent(v.join('='))}catch{return ''}}}return ''}
 function makeSession(accessToken,refreshToken,user,expiresIn=3600){return makeSigned({accessToken,refreshToken,user,expiresAt:Date.now()+Math.max(60,Number(expiresIn)-30)*1000})}
 function cookieFlags(){return `Path=/; HttpOnly; ${isProduction?'Secure; ':''}SameSite=Lax; Max-Age=604800`}
 export function sessionCookie(token){return `astracore_session=${encodeURIComponent(token)}; ${cookieFlags()}`}
