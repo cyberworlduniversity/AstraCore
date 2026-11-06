@@ -15,7 +15,8 @@ export class ToolRegistry {
   }
 
   register(tool) {
-    if (!tool?.name || !tool?.description || !tool?.inputSchema) throw new Error('Invalid tool definition');
+    if (!tool?.name || !tool?.description || !tool?.inputSchema || tool.inputSchema.type !== 'object') throw new Error('Invalid tool definition');
+    if (tool.execute !== undefined && typeof tool.execute !== 'function') throw new Error('Tool executor must be a function');
     this.tools.set(tool.name, Object.freeze({ ...tool, inputSchema: freezeSchema(structuredClone(tool.inputSchema)) }));
     return this.tools.get(tool.name);
   }
