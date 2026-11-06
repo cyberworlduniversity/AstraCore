@@ -51,29 +51,29 @@ test('saved assistant lookup is constrained by message, conversation and owner I
   let captured;
   const result=await readIdempotentMessage({}, {id:'user-a'}, 'conversation-a',requestId,'assistant',async(_req,path)=>{captured=path;return [{id:idempotentMessageId(requestId,'assistant','user-a','conversation-a'),content:'saved answer'}]});
   assert.equal(result.content,'saved answer');
-  assert.match(captured,/id=eq\\./);
-  assert.match(captured,/conversation_id=eq\\.conversation-a/);
-  assert.match(captured,/user_id=eq\\.user-a/);
+  assert.ok(captured.includes('id=eq.'));
+  assert.ok(captured.includes('conversation_id=eq.conversation-a'));
+  assert.ok(captured.includes('user_id=eq.user-a'));
 });
 
 test('both chat handlers require request IDs and replay a previously saved assistant answer',async()=>{
   const api=await readFile(new URL('../api/[...path].js',import.meta.url),'utf8');
   const server=await readFile(new URL('../server/server.js',import.meta.url),'utf8');
   for(const source of [api,server]){
-    assert.match(source,/body\\.requestId/);
+    assert.ok(source.includes('body.requestId'));
     assert.match(source,/priorAssistant/);
     assert.match(source,/idempotent_replay:true/);
     assert.match(source,/resolution=ignore-duplicates/);
-    assert.match(source,/savedUser\\.content!==message/);
-    assert.match(source,/status:409|json\\(res,409/);
+    assert.ok(source.includes('savedUser.content!==message'));
+    assert.ok(source.includes('status:409') || source.includes('json(res,409'));
     assert.match(source,/canonicalAssistant/);
   }
 });
 
 test('browser retry reuses the original request ID instead of creating another message',async()=>{
   const source=await readFile(new URL('../web/app.js',import.meta.url),'utf8');
-  assert.match(source,/requestId=retry\\?\\.requestId\\|\\|crypto\\.randomUUID\\(\\)/);
-  assert.match(source,/sendMessage\\(\\{text,requestId,files,bubble:pending,button:retryButton\\}\\)/);
+  assert.ok(source.includes('requestId=retry?.requestId||crypto.randomUUID()'));
+  assert.ok(source.includes('sendMessage({text,requestId,files,bubble:pending,button:retryButton})'));
   assert.match(source,/requestId,maxNewTokens/);
 });
 
@@ -103,7 +103,7 @@ test('lost-response retry can retrieve the already persisted assistant response'
   let reads=0;
   const recovered=await readIdempotentMessage({}, {id:'user-a'}, 'conversation-a', requestId, 'assistant', async(_req,path)=>{
     reads++;
-    assert.match(path,/user_id=eq\\.user-a/);
+    assert.ok(path.includes('user_id=eq.user-a'));
     return [persisted];
   });
   assert.equal(reads,1);
