@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node server/server.js",
     "train:demo": "node scripts/train-demo.js",
-    "test": "node --test"
+    "test": "node --test",
+    "test:rls": "node scripts/test-two-user-rls.js"
   },
   "engines": {
     "node": "24.x"
