@@ -5,7 +5,10 @@ import { ToolRegistry } from '../src/core/tool-agent-system.js';
 
 function setup() {
   const events = [];
-  const registry = new ToolRegistry({ auditWriter: async (event) => events.push(event) });
+  const registry = new ToolRegistry({
+    auditWriter: async (event) => events.push(event),
+    authorizeContext: async () => ({ authenticated: true, userId: 'user-1', allowedTools: ['safe_lookup'] }),
+  });
   registry.register({
     name: 'safe_lookup',
     enabled: true,
@@ -45,7 +48,9 @@ test('agent execution delegates through the policy-enforced registry', async () 
 
 test('agent execution is blocked if caller identity or trusted audit writer is missing', async () => {
   const { engine, context } = setup();
-  const registryWithoutAudit = new ToolRegistry();
+  const registryWithoutAudit = new ToolRegistry({
+    authorizeContext: async () => ({ authenticated: true, userId: 'user-1', allowedTools: ['safe_lookup'] }),
+  });
   registryWithoutAudit.register({
     name: 'safe_lookup', enabled: true, risk: 'low',
     inputSchema: { type: 'object', required: ['query'], additionalProperties: false, properties: { query: { type: 'string' } } },
@@ -80,15 +85,19 @@ test('agent execution rejects calls beyond configured step limit', async () => {
   );
 });
 
-test('agent rejects caller-supplied authentication flags without trusted resolver', async () => {
-  const { engine } = setup();
-  const untrustedEngine = new AgentEngine({ toolRegistry: engine.toolRegistry });
-  await assert.rejects(
-    untrustedEngine.run({
-      task: 'attempt to spoof authentication',
-      context: { authenticated: true, userId: 'attacker', allowedTools: ['safe_lookup'] },
-      toolCalls: [{ name: 'safe_lookup', input: { query: 'x' } }],
-    }),
-    (error) => error.status === 503,
-  );
+test('agent blocks tool execution when trusted resolver is absent', async () => {
+  const registry = new ToolRegistry();
+  registry.register({
+    name: 'safe_lookup', enabled: true, risk: 'low',
+    inputSchema: { type: 'object', required: ['query'], additionalProperties: false, properties: { query: { type: 'string' } } },
+    execute: async () => ({ result: 'must not run' }),
+  });
+  const untrustedEngine = new AgentEngine({ toolRegistry: registry });
+  const result = await untrustedEngine.run({
+    task: 'attempt to spoof authentication',
+    context: { authenticated: true, userId: 'attacker', allowedTools: ['safe_lookup'] },
+    toolCalls: [{ name: 'safe_lookup', input: { query: 'x' } }],
+  });
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.results[0].verification.valid, false);
 });
