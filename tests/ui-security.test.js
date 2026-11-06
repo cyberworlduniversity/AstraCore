@@ -43,3 +43,18 @@ test('session cookie parser rejects malformed encodings and MAC comparison is co
   assert.ok(authServer.includes('HttpOnly'));
   assert.ok(authServer.includes('SameSite=Lax'));
 });
+
+
+test('corrupt or unavailable browser storage cannot prevent chat startup', () => {
+  assert.ok(app.includes('function readStoredText('));
+  assert.ok(app.includes('function readStoredJson('));
+  assert.ok(app.includes("skills:readStoredJson('astracore.skills',null)||["));
+  assert.ok(app.includes('catch{return fallback}'));
+});
+
+test('file previews are not falsely sent as analyzed attachments', () => {
+  assert.ok(app.includes('Attachments are currently local previews only.'));
+  assert.ok(app.includes('selected files remain local previews and were not uploaded or analyzed.'));
+  assert.ok(!app.includes('attachments:files.map('));
+  assert.ok(app.includes("const type=f.type||'application/octet-stream'"));
+});
