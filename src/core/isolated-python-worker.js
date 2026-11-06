@@ -201,6 +201,7 @@ export function createIsolatedPythonTool(worker, { enabled = false } = {}) {
     name: 'code_execution',
     description: 'Execute a short Python program in a disposable gVisor container with no network access.',
     status: enabled === true ? 'enabled' : 'disabled',
+    enabled: enabled === true,
     risk: 'high',
     riskLevel: 'high',
     timeoutMs: MAX_TIMEOUT_MS + 1_000,
