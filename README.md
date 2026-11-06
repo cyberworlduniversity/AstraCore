@@ -26,3 +26,14 @@ AstraCore v0.1 is an engineering foundation, not a claim of GPT-class capability
 5. Security and privacy by default.
 
 See `docs/ASTRACORE_AI_ARCHITECTURE.md` for the initial architecture.
+
+See `docs/CHECKPOINT_CERTIFICATION.md` for experimental checkpoint integrity verification.
+
+See `docs/BEHAVIORAL_EVALUATION.md` for running the deterministic behavioral benchmark.
+
+See `docs/ADVERSARIAL_EVALUATION.md` for the local adversarial response evaluation suite.
+
+See `docs/TOOL_EXECUTION_SECURITY.md` for tool authorization, resource limits, audit requirements, and sandbox isolation boundaries.
+
+
+See `docs/ISOLATED_PYTHON_WORKER.md` for the fail-closed gVisor worker contract, container restrictions, and deployment requirements.

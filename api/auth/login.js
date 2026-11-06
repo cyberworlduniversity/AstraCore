@@ -1,4 +1,5 @@
 import { login, sessionCookie } from '../../server/auth.js';
+import { rejectCrossOriginRequest } from '../../server/csrf.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -6,9 +7,16 @@ export default async function handler(req, res) {
     res.setHeader('allow', 'POST');
     return res.end(JSON.stringify({ error: 'Method not allowed' }));
   }
+  if (rejectCrossOriginRequest(req, res)) return;
   try {
     const body = typeof req.body === 'object' && req.body ? req.body : {};
     const result = await login(body.email, body.password);
+    if (!result.token) {
+      res.statusCode = 401;
+      res.setHeader('content-type', 'application/json; charset=utf-8');
+      res.setHeader('cache-control', 'no-store');
+      return res.end(JSON.stringify({ error: 'Authentication did not return a session. Confirm the account email and try again.' }));
+    }
     res.statusCode = 200;
     res.setHeader('content-type', 'application/json; charset=utf-8');
     res.setHeader('cache-control', 'no-store');

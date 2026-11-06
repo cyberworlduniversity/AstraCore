@@ -2,16 +2,22 @@ name: AstraCore CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'feat/**', 'fix/**', 'test/**']
   pull_request:
-    branches: [main]
+    branches: [main, 'feat/**', 'fix/**', 'test/**']
 
+# CI is validation-only. It must never write to the repository.
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: astracore-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,49 +25,67 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements.txt
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install Node dependencies
+        run: npm ci
 
       - name: Install Python model dependencies
         run: python -m pip install -r requirements.txt
 
-      - name: Apply Steps 12-15 implementation
-        if: "!contains(github.event.head_commit.message, '[steps-12-15-complete]')"
-        run: |
-          if [ -f server/embedding-service.js ]; then
-            echo "Steps 12-15 source integration already present"
-          else
-            python3 scripts/apply_steps_12_15.py
-          fi
-
       - name: Run Node test suite
         run: npm test
 
+      - name: Run optional two-user Supabase RLS integration test
+        env:
+          ASTRACORE_RLS_TARGET: ${{ secrets.ASTRACORE_RLS_TARGET }}
+          ASTRACORE_SUPABASE_URL: ${{ secrets.ASTRACORE_SUPABASE_URL }}
+          ASTRACORE_SUPABASE_ANON_KEY: ${{ secrets.ASTRACORE_SUPABASE_ANON_KEY }}
+          ASTRACORE_RLS_USER_A_JWT: ${{ secrets.ASTRACORE_RLS_USER_A_JWT }}
+          ASTRACORE_RLS_USER_B_JWT: ${{ secrets.ASTRACORE_RLS_USER_B_JWT }}
+        run: npm run test:rls
+
+      - name: Run optional two-user AstraCore application API isolation test
+        env:
+          ASTRACORE_API_RLS_TARGET: ${{ secrets.ASTRACORE_API_RLS_TARGET }}
+          ASTRACORE_API_BASE_URL: ${{ secrets.ASTRACORE_API_BASE_URL }}
+          ASTRACORE_API_USER_A_EMAIL: ${{ secrets.ASTRACORE_API_USER_A_EMAIL }}
+          ASTRACORE_API_USER_A_PASSWORD: ${{ secrets.ASTRACORE_API_USER_A_PASSWORD }}
+          ASTRACORE_API_USER_B_EMAIL: ${{ secrets.ASTRACORE_API_USER_B_EMAIL }}
+          ASTRACORE_API_USER_B_PASSWORD: ${{ secrets.ASTRACORE_API_USER_B_PASSWORD }}
+          ASTRACORE_API_SUPABASE_URL: ${{ secrets.ASTRACORE_API_SUPABASE_URL }}
+          ASTRACORE_API_SUPABASE_ANON_KEY: ${{ secrets.ASTRACORE_API_SUPABASE_ANON_KEY }}
+          ASTRACORE_API_USER_A_JWT: ${{ secrets.ASTRACORE_API_USER_A_JWT }}
+        run: npm run test:api-rls
       - name: Run Python test suite
         run: python -m pytest -q tests/test_*.py
 
       - name: Syntax check runtime files
         run: |
+          node --check web/auth.js
+          node --check web/app.js
           node --check server/server.js
           node --check server/auth.js
+          node --check server/csrf.js
           node --check server/knowledge-api.js
           node --check server/embedding-service.js
+          node --check src/core/isolated-python-worker.js
+          node --check tests/isolated-python-worker.test.js
           node --check api/[...path].js
-
-      - name: Commit Steps 12-15 implementation
-        if: "github.event_name == 'push' && !contains(github.event.head_commit.message, '[steps-12-15-complete]')"
-        run: |
-          git config user.name "AstraCore Bot"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .
-          git diff --cached --quiet && exit 0
-          git commit -m "feat: complete steps 12-15 [steps-12-15-complete]"
-          git push
+          node --check api/admin/[...path].js
+          node --check api/auth/signup.js
+          node --check api/auth/login.js
+          node --check api/auth/resend-verification.js
+          node --check tests/auth-resend-verification.test.js
+          node --check api/auth/logout.js
+          node --check api/auth/me.js
+          node --check tests/auth-session-endpoints.test.js
+          node --check tests/chat-persistence-security.test.js

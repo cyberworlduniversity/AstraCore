@@ -70,17 +70,17 @@ export async function knowledgeRoute({ req, res, url, user, readBody, json, supa
   }
 
   if (req.method === 'GET' && url.pathname === '/api/knowledge') {
-    const rows = await request('/rest/v1/astracore_knowledge_documents?select=id,title,source,document_type,language,status,tags,content_hash,metadata,created_at,updated_at&order=updated_at.desc&limit=100');
+    const rows = await request(`/rest/v1/astracore_knowledge_documents?user_id=eq.${encodeURIComponent(user.id)}&select=id,title,source,document_type,language,status,tags,content_hash,metadata,created_at,updated_at&order=updated_at.desc&limit=100`);
     return json(res, 200, { documents: rows });
   }
 
   if (req.method === 'DELETE' && /^\/api\/knowledge\/[^/]+$/.test(url.pathname)) {
     const id = decodeURIComponent(url.pathname.split('/')[3]);
-    const rows = await request(`/rest/v1/astracore_knowledge_documents?id=eq.${encodeURIComponent(id)}&select=id,source_id&limit=1`);
+    const rows = await request(`/rest/v1/astracore_knowledge_documents?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(user.id)}&select=id,source_id&limit=1`);
     if (!rows[0]) return json(res, 404, { error: 'Knowledge document not found' });
-    await request(`/rest/v1/astracore_knowledge_chunks?document_id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
-    await request(`/rest/v1/astracore_knowledge_documents?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
-    if (rows[0].source_id) await request(`/rest/v1/astracore_knowledge_sources?id=eq.${encodeURIComponent(rows[0].source_id)}`, { method: 'DELETE' }).catch(() => {});
+    await request(`/rest/v1/astracore_knowledge_chunks?document_id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: 'DELETE' });
+    await request(`/rest/v1/astracore_knowledge_documents?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: 'DELETE' });
+    if (rows[0].source_id) await request(`/rest/v1/astracore_knowledge_sources?id=eq.${encodeURIComponent(rows[0].source_id)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: 'DELETE' }).catch(() => {});
     return json(res, 200, { ok: true, id });
   }
 

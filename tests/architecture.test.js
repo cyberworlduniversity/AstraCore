@@ -30,7 +30,7 @@ test('source records preserve provenance', () => {
 });
 
 test('tool registry blocks unimplemented tools instead of faking them', () => {
-  const registry = new ToolRegistry([{ name: 'web_search', description: 'web', inputSchema: {}, status: 'not_implemented' }]);
+  const registry = new ToolRegistry([{ name: 'web_search', description: 'web', inputSchema: { type: 'object' }, status: 'not_implemented' }]);
   assert.throws(() => registry.assertAllowed('web_search', { authenticated: true }), /NOT IMPLEMENTED/);
 });
 
