@@ -34,9 +34,6 @@ test('email-confirmation signup returns verification state without setting a ses
     if (target.endsWith('/auth/v1/signup')) {
       return new Response(JSON.stringify({ user }), { status: 200 });
     }
-    if (target.endsWith('/auth/v1/otp')) {
-      return new Response(JSON.stringify({ message_id: 'verification-message' }), { status: 200 });
-    }
     throw new Error('Unexpected Supabase request: ' + target);
   };
 
@@ -56,8 +53,8 @@ test('email-confirmation signup returns verification state without setting a ses
       authenticated: false,
       verificationRequired: true,
     });
-    assert.equal(calls.length, 2);
-    assert.ok(calls.some((call) => call.target.endsWith('/auth/v1/otp')));
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0].target.endsWith('/auth/v1/signup'));
   } finally {
     globalThis.fetch = originalFetch;
   }
