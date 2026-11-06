@@ -35,13 +35,14 @@ export class IsolatedPythonWorker {
     this.spawnProcess = spawnProcess;
   }
 
-  async run({ code, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+  async run({ code, timeoutMs = DEFAULT_TIMEOUT_MS, signal } = {}) {
     if (typeof code !== 'string' || !code.trim()) {
       throw sandboxError('Python source code is required', 400, 'INVALID_SANDBOX_INPUT');
     }
     if (Buffer.byteLength(code, 'utf8') > MAX_CODE_BYTES) {
       throw sandboxError('Python source exceeds the 16 KiB limit', 413, 'SANDBOX_INPUT_TOO_LARGE');
     }
+    if (signal?.aborted) throw sandboxError('Isolated worker was cancelled', 499, 'SANDBOX_ABORTED');
     const { image, dockerHost } = readSandboxConfig(this.env);
     const timeout = Math.min(Math.max(Number(timeoutMs) || DEFAULT_TIMEOUT_MS, 100), MAX_TIMEOUT_MS);
     const containerName = 'astracore-job-' + randomUUID();
@@ -83,6 +84,7 @@ export class IsolatedPythonWorker {
       let outputBytes = 0;
       let settled = false;
       let timedOut = false;
+      let aborted = false;
       let outputExceeded = false;
       let timer;
 
@@ -90,6 +92,7 @@ export class IsolatedPythonWorker {
         if (settled) return;
         settled = true;
         if (timer) clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
         reject(error);
       };
 
@@ -132,9 +135,14 @@ export class IsolatedPythonWorker {
         if (settled) return;
         settled = true;
         if (timer) clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
         const durationMs = Date.now() - started;
         if (timedOut) {
           reject(sandboxError('Isolated worker exceeded its execution deadline', 504, 'SANDBOX_TIMEOUT'));
+          return;
+        }
+        if (aborted) {
+          reject(sandboxError('Isolated worker was cancelled', 499, 'SANDBOX_ABORTED'));
           return;
         }
         if (outputExceeded) {
@@ -150,6 +158,11 @@ export class IsolatedPythonWorker {
         });
       });
 
+      const onAbort = () => {
+        aborted = true;
+        kill();
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
       timer = setTimeout(() => {
         timedOut = true;
         kill();
@@ -173,3 +186,34 @@ export const ISOLATED_WORKER_LIMITS = Object.freeze({
   cpus: '0.25',
   pids: 16,
 });
+
+/**
+ * Creates a registry-compatible adapter. It is disabled unless the operator
+ * explicitly opts in after provisioning and validating the isolated daemon.
+ */
+export function createIsolatedPythonTool(worker, { enabled = false } = {}) {
+  if (!worker || typeof worker.run !== 'function') {
+    throw new TypeError('An IsolatedPythonWorker instance is required');
+  }
+  return {
+    name: 'code_execution',
+    description: 'Execute a short Python program in a disposable gVisor container with no network access.',
+    status: enabled === true ? 'enabled' : 'disabled',
+    risk: 'high',
+    riskLevel: 'high',
+    timeoutMs: MAX_TIMEOUT_MS + 1_000,
+    inputSchema: {
+      type: 'object',
+      required: ['code'],
+      additionalProperties: false,
+      properties: {
+        code: { type: 'string', minLength: 1, maxLength: MAX_CODE_BYTES },
+      },
+    },
+    execute: async ({ code }, context = {}) => worker.run({
+      code,
+      timeoutMs: MAX_TIMEOUT_MS,
+      signal: context.signal,
+    }),
+  };
+}
