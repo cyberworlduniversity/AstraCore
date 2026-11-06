@@ -26,3 +26,6 @@ AstraCore v0.1 is an engineering foundation, not a claim of GPT-class capability
 5. Security and privacy by default.
 
 See `docs/ASTRACORE_AI_ARCHITECTURE.md` for the initial architecture.\n\nSee `docs/CHECKPOINT_CERTIFICATION.md` for experimental checkpoint integrity verification.
+
+
+See `docs/BEHAVIORAL_EVALUATION.md` for running the deterministic behavioral benchmark.
