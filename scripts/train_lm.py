@@ -1,5 +1,4 @@
 import argparse
-import copy
 import hashlib
 import json
 import math
@@ -118,7 +117,7 @@ def save_checkpoint(output, model, tokenizer, config, optimizer, epoch, step, va
         'step': step,
         'val_loss': val_loss,
     }, output / 'model.pt')
-    (output / 'config.json').write_text(json.dumps(config.to_dict(), indent=2) + '\\n', encoding='utf-8')
+    (output / 'config.json').write_text(json.dumps(config.to_dict(), indent=2) + '\n', encoding='utf-8')
     tokenizer.save(output / 'tokenizer.json')
     (output / 'training_state.json').write_text(json.dumps({
         'status': 'trained',
@@ -128,7 +127,7 @@ def save_checkpoint(output, model, tokenizer, config, optimizer, epoch, step, va
         'validation_loss': val_loss,
         'validation_perplexity': math.exp(val_loss) if val_loss < 700 else float('inf'),
         'dataset': dataset_metadata,
-    }, indent=2) + '\\n', encoding='utf-8')
+    }, indent=2) + '\n', encoding='utf-8')
 
 
 def main():
@@ -158,9 +157,9 @@ def main():
     if not all(splits.values()):
         raise ValueError('Training requires non-empty train, validation, and test splits')
     tokenizer = AstraTokenizer.build(splits['train'], args.vocab_size)
-    train_ids = tokenizer.encode('\\n\\n'.join(splits['train']))
-    validation_ids = tokenizer.encode('\\n\\n'.join(splits['validation']))
-    test_ids = tokenizer.encode('\\n\\n'.join(splits['test']))
+    train_ids = tokenizer.encode('\n\n'.join(splits['train']))
+    validation_ids = tokenizer.encode('\n\n'.join(splits['validation']))
+    test_ids = tokenizer.encode('\n\n'.join(splits['test']))
 
     config = ModelConfig(
         vocab_size=tokenizer.vocab_size,
@@ -241,7 +240,7 @@ def main():
         'test_perplexity': test_perplexity,
         'dataset': dataset_metadata,
     }
-    (output / 'test_evaluation.json').write_text(json.dumps(evaluation, indent=2) + '\\n', encoding='utf-8')
+    (output / 'test_evaluation.json').write_text(json.dumps(evaluation, indent=2) + '\n', encoding='utf-8')
 
     state_path = output / 'training_state.json'
     state = json.loads(state_path.read_text(encoding='utf-8'))
@@ -251,7 +250,7 @@ def main():
         'test_evaluated_checkpoint_epoch': best_epoch,
         'test_evaluated_checkpoint_step': best_step,
     })
-    state_path.write_text(json.dumps(state, indent=2) + '\\n', encoding='utf-8')
+    state_path.write_text(json.dumps(state, indent=2) + '\n', encoding='utf-8')
 
 
 if __name__ == '__main__':
