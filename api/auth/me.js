@@ -1,4 +1,4 @@
-import { currentUser, isAdmin } from '../../server/auth.js';
+import { currentUser, isAdmin, sessionCookie } from '../../server/auth.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -8,6 +8,7 @@ export default async function handler(req, res) {
   }
   try {
     const user = await currentUser(req);
+    if (req.astracoreRefreshedSession) res.setHeader('set-cookie', sessionCookie(req.astracoreRefreshedSession));
     res.statusCode = 200;
     res.setHeader('content-type', 'application/json; charset=utf-8');
     res.setHeader('cache-control', 'no-store');

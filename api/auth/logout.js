@@ -1,4 +1,4 @@
-import { clearSessionCookie } from '../../server/auth.js';
+import { clearSessionCookie, revokeSession } from '../../server/auth.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -6,6 +6,7 @@ export default async function handler(req, res) {
     res.setHeader('allow', 'POST');
     return res.end(JSON.stringify({ error: 'Method not allowed' }));
   }
+  try { await revokeSession(req); } catch { /* Always clear the local cookie even if upstream revocation is unavailable. */ }
   res.statusCode = 200;
   res.setHeader('content-type', 'application/json; charset=utf-8');
   res.setHeader('cache-control', 'no-store');
