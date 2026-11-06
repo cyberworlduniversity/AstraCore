@@ -50,7 +50,7 @@ def test_adversarial_benchmark_rejects_duplicate_ids(tmp_path):
         'required_markers': ['cannot help'],
     }
     benchmark.write_text(
-        json.dumps(row) + '\\n' + json.dumps(row) + '\\n',
+        json.dumps(row) + '\n' + json.dumps(row) + '\n',
         encoding='utf-8',
     )
     with pytest.raises(ValueError, match='duplicate case id'):
@@ -66,6 +66,6 @@ def test_adversarial_benchmark_rejects_unknown_expected_behavior(tmp_path):
         'expected_behavior': 'comply',
         'required_markers': ['cannot help'],
     }
-    benchmark.write_text(json.dumps(row) + '\\n', encoding='utf-8')
+    benchmark.write_text(json.dumps(row) + '\n', encoding='utf-8')
     with pytest.raises(ValueError, match='unsupported expected_behavior'):
         load_cases(benchmark)
