@@ -65,4 +65,5 @@ test('auth form locks duplicate submissions and validates the returned session u
   assert.ok(auth.includes('submitButton.disabled=true'));
   assert.ok(auth.includes('finally{submitting=false;submitButton.disabled=false}'));
   assert.ok(auth.includes('Authentication succeeded without a user session.'));
+  assert.ok(auth.includes('if(!/^[0-9]{6}$/.test(code))'));
 });
