@@ -93,6 +93,29 @@ test('login -> auth/me -> protected chat workspace API -> logout -> protected AP
     assert.match(loginRes.headers['set-cookie'], /SameSite=Lax/);
     const cookie = cookieFrom(loginRes);
 
+    const crossOriginLoginRes = responseCapture();
+    await loginHandler({
+      method: 'POST',
+      body: { email: 'attacker@example.test', password: 'irrelevant-password' },
+      headers: { host: 'astracore.example', origin: 'https://evil.example', 'x-forwarded-proto': 'https' },
+    }, crossOriginLoginRes);
+    assert.equal(crossOriginLoginRes.statusCode, 403);
+
+    const crossOriginMutationRes = responseCapture();
+    await apiHandler({
+      method: 'DELETE',
+      url: '/api/conversations/conversation-a',
+      headers: { host: 'astracore.example', origin: 'https://evil.example', 'x-forwarded-proto': 'https', cookie },
+    }, crossOriginMutationRes);
+    assert.equal(crossOriginMutationRes.statusCode, 403);
+
+    const crossOriginLogoutRes = responseCapture();
+    await logoutHandler({
+      method: 'POST',
+      headers: { host: 'astracore.example', origin: 'https://evil.example', 'x-forwarded-proto': 'https', cookie },
+    }, crossOriginLogoutRes);
+    assert.equal(crossOriginLogoutRes.statusCode, 403);
+
     const meRes = responseCapture();
     await meHandler({ method: 'GET', headers: { cookie } }, meRes);
     assert.equal(meRes.statusCode, 200);
