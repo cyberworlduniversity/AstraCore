@@ -104,3 +104,23 @@ test('models endpoint does not expose checkpoint paths or training metadata to r
   assert.match(path, /select=id,model_id,display_name,architecture,status/);
   assert.doesNotMatch(path, /checkpoint_path|training_metadata|training_seed|device/);
 });
+
+test('memory forget can permanently erase an owned record after consent revocation or expiry', async () => {
+  const calls = [];
+  const res = await route({
+    method: 'DELETE', path: '/api/memory/m-revoked', user: { id: 'user-a' },
+    request: async (_req, requestPath, options) => {
+      calls.push({ requestPath, method: options?.method || 'GET' });
+      if (!options) return [{ memory_id: 'm-revoked', consent_revoked_at: '2026-11-06T00:00:00.000Z' }];
+      return [];
+    },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].requestPath, /user_id=eq\.user-a/);
+  assert.match(calls[0].requestPath, /memory_id=eq\.m-revoked/);
+  assert.doesNotMatch(calls[0].requestPath, /consent_revoked_at|expires_at/);
+  assert.equal(calls[1].method, 'DELETE');
+  assert.match(calls[1].requestPath, /user_id=eq\.user-a/);
+  assert.equal(res.body.ok, true);
+});
