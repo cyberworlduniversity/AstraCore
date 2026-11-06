@@ -46,7 +46,6 @@ export class AgentEngine {
           allowedTools: context.allowedTools,
           userId: context.userId,
           requestId: context.requestId,
-          audit: context.audit,
         });
         const verification = verifyToolResult(result);
         results.push({
