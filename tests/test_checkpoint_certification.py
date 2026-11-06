@@ -20,7 +20,7 @@ def make_trained_checkpoint(tmp_path):
          'text': ('astra core tests language model security and safe systems. ' * 30)},
     ]
     (corpus / 'records.jsonl').write_text(
-        ''.join(json.dumps(row) + '\\n' for row in rows), encoding='utf-8'
+        ''.join(json.dumps(row) + '\n' for row in rows), encoding='utf-8'
     )
     checkpoint = tmp_path / 'checkpoint'
     script = Path(__file__).resolve().parents[1] / 'scripts' / 'train_lm.py'
