@@ -1,9 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { idempotentMessageId, saveMessage, readIdempotentMessage } from '../api/[...path].js';
+import { idempotentConversationId, idempotentMessageId, ensureConversation, saveMessage, readIdempotentMessage } from '../api/[...path].js';
 
 const requestId='b3a1f8d2-6c4e-4a1b-9f20-123456789abc';
+
+
+test('first-message retry derives the same owner-scoped conversation ID',async()=>{
+  const first=idempotentConversationId(requestId,'user-a');
+  assert.equal(first,idempotentConversationId(requestId,'user-a'));
+  assert.notEqual(first,idempotentConversationId(requestId,'user-b'));
+  const calls=[];
+  const conversation=await ensureConversation({}, {id:'user-a'}, null,'astracore-neural-a','hello',async(_req,path,options)=>{
+    calls.push({path,options});
+    if(options?.method==='POST')return [];
+    return [{id:first,user_id:'user-a',title:'hello'}];
+  },requestId);
+  assert.equal(conversation.id,first);
+  assert.equal(calls.length,2);
+  assert.match(calls[0].path,/on_conflict=id/);
+  assert.equal(JSON.parse(calls[0].options.body).id,first);
+  assert.match(calls[1].path,new RegExp(first));
+});
 
 test('message IDs are deterministic per request and role, but differ across roles',()=>{
   const userId=idempotentMessageId(requestId,'user');
@@ -20,7 +38,7 @@ test('invalid request IDs and unsupported roles are rejected',()=>{
 test('retry-safe message save uses primary-key conflict ignore and stable IDs',async()=>{
   const calls=[];
   const id=await saveMessage({}, {id:'user-a'}, 'conversation-a','user','hello','astracore-neural-a',{},async(_req,path,options)=>{calls.push({path,options});return []},requestId);
-  assert.equal(id,idempotentMessageId(requestId,'user'));
+  assert.equal(id,idempotentMessageId(requestId,'user','user-a','conversation-a'));
   assert.equal(calls.length,1);
   assert.equal(calls[0].path,'/rest/v1/astracore_messages?on_conflict=id');
   assert.equal(calls[0].options.headers.Prefer,'resolution=ignore-duplicates,return=minimal');
@@ -31,7 +49,7 @@ test('retry-safe message save uses primary-key conflict ignore and stable IDs',a
 
 test('saved assistant lookup is constrained by message, conversation and owner IDs',async()=>{
   let captured;
-  const result=await readIdempotentMessage({}, {id:'user-a'}, 'conversation-a',requestId,'assistant',async(_req,path)=>{captured=path;return [{id:idempotentMessageId(requestId,'assistant'),content:'saved answer'}]});
+  const result=await readIdempotentMessage({}, {id:'user-a'}, 'conversation-a',requestId,'assistant',async(_req,path)=>{captured=path;return [{id:idempotentMessageId(requestId,'assistant','user-a','conversation-a'),content:'saved answer'}]});
   assert.equal(result.content,'saved answer');
   assert.match(captured,/id=eq\./);
   assert.match(captured,/conversation_id=eq\.conversation-a/);
