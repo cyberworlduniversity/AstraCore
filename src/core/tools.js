@@ -5,7 +5,8 @@ function freezeSchema(value) {
   for (const child of Object.values(value)) freezeSchema(child);
   return Object.freeze(value);
 }
-\nexport class ToolRegistry {
+
+export class ToolRegistry {
   constructor(definitions = []) {
     this.tools = new Map();
     for (const tool of definitions) this.register(tool);
