@@ -51,6 +51,13 @@ export async function revokeSession(req){
 export async function currentUser(req){
  const signed=readSessionToken(parseCookie(req,'astracore_session'));
  if(!signed)return null;
+ // An expired access JWT cannot authenticate a PostgREST denylist lookup. Refresh it first;
+ // a revoked refresh token is rejected by Supabase, and the replacement token is then checked.
+ if(Number(signed.expiresAt)>0&&Number(signed.expiresAt)<=Date.now()){
+  const refreshed=await refreshSession(signed);if(!refreshed)return null;
+  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken}))return null;
+  req.astracoreRefreshedSession=refreshed.token;req.astracoreAccessToken=refreshed.accessToken;return refreshed.user;
+ }
  // Fail closed if the revocation store is unavailable; never silently accept an unchecked session.
  if(await sessionRevoked(signed))return null;
  try{return await userFromToken(signed.accessToken)}catch{
