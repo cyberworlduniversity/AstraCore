@@ -27,7 +27,7 @@ export class AgentEngine {
     }
     const calls = Array.isArray(toolCalls) && toolCalls.length
       ? toolCalls
-      : tools.slice(0, this.maxSteps).map((name) => ({ name, input: { task: String(task).slice(0, 4000) } }));
+      : (Array.isArray(tools) ? tools : []).slice(0, this.maxSteps).map((name) => ({ name, input: { task: String(task).slice(0, 4000) } }));
     if (!Array.isArray(calls) || calls.length > this.maxSteps) {
       throw Object.assign(new Error('Agent tool-call limit exceeded'), { status: 400 });
     }
