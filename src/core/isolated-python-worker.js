@@ -35,14 +35,14 @@ export class IsolatedPythonWorker {
     this.spawnProcess = spawnProcess;
   }
 
-  async run({ code, timeoutMs = DEFAULT_TIMEOUT_MS, signal } = {}) {
+  async run({ code, timeoutMs = DEFAULT_TIMEOUT_MS, signal: abortSignal } = {}) {
     if (typeof code !== 'string' || !code.trim()) {
       throw sandboxError('Python source code is required', 400, 'INVALID_SANDBOX_INPUT');
     }
     if (Buffer.byteLength(code, 'utf8') > MAX_CODE_BYTES) {
       throw sandboxError('Python source exceeds the 16 KiB limit', 413, 'SANDBOX_INPUT_TOO_LARGE');
     }
-    if (signal?.aborted) throw sandboxError('Isolated worker was cancelled', 499, 'SANDBOX_ABORTED');
+    if (abortSignal?.aborted) throw sandboxError('Isolated worker was cancelled', 499, 'SANDBOX_ABORTED');
     const { image, dockerHost } = readSandboxConfig(this.env);
     const timeout = Math.min(Math.max(Number(timeoutMs) || DEFAULT_TIMEOUT_MS, 100), MAX_TIMEOUT_MS);
     const containerName = 'astracore-job-' + randomUUID();
@@ -87,12 +87,13 @@ export class IsolatedPythonWorker {
       let aborted = false;
       let outputExceeded = false;
       let timer;
+      let onAbort = () => {};
 
       const finishReject = (error) => {
         if (settled) return;
         settled = true;
         if (timer) clearTimeout(timer);
-        signal?.removeEventListener('abort', onAbort);
+        abortSignal?.removeEventListener('abort', onAbort);
         reject(error);
       };
 
@@ -131,7 +132,7 @@ export class IsolatedPythonWorker {
       child.on('error', () => {
         finishReject(sandboxError('Isolated worker process failed to start', 503, 'SANDBOX_START_FAILED'));
       });
-      child.on('close', (exitCode, signal) => {
+      child.on('close', (exitCode, closeSignal) => {
         if (settled) return;
         settled = true;
         if (timer) clearTimeout(timer);
@@ -151,18 +152,18 @@ export class IsolatedPythonWorker {
         }
         resolve({
           exitCode,
-          signal: signal || null,
+          signal: closeSignal || null,
           stdout: redactSecrets(stdout),
           stderr: redactSecrets(stderr),
           durationMs,
         });
       });
 
-      const onAbort = () => {
+      onAbort = () => {
         aborted = true;
         kill();
       };
-      signal?.addEventListener('abort', onAbort, { once: true });
+      abortSignal?.addEventListener('abort', onAbort, { once: true });
       timer = setTimeout(() => {
         timedOut = true;
         kill();
