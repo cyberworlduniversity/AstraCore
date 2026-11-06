@@ -43,7 +43,7 @@ export async function revokeSession(req){
  const session=readSessionToken(parseCookie(req,'astracore_session'));
  if(!session?.accessToken||!session?.user?.id)return false;
  const expiresAt=Number(session.sessionExpiresAt)||Date.now()+7*24*60*60*1000;
- await sb('/rest/v1/astracore_revoked_sessions',{method:'POST',headers:{Authorization:`Bearer ${session.accessToken}`,Prefer:'return=minimal'},body:JSON.stringify({session_hash:sessionHash(session.accessToken),user_id:session.user.id,expires_at:new Date(expiresAt).toISOString()})});
+ await sb('/rest/v1/astracore_revoked_sessions',{method:'POST',headers:{Authorization:`Bearer ${session.accessToken}`,Prefer:'resolution=ignore-duplicates,return=minimal'},body:JSON.stringify({session_hash:sessionHash(session.accessToken),user_id:session.user.id,expires_at:new Date(expiresAt).toISOString()})});
  // Supabase revokes refresh tokens; the server-side denylist blocks this access token immediately.
  try{await sb('/auth/v1/logout',{method:'POST',headers:{Authorization:`Bearer ${session.accessToken}`}})}catch{}
  return true;
