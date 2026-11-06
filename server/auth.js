@@ -12,7 +12,7 @@ function secret(){if(SESSION_SECRET)return SESSION_SECRET;if(isProduction)throw 
 function sign(v){return createHmac('sha256',secret()).update(v).digest('hex')}
 function encryptionKey(){return createHash('sha256').update('AstraCore session encryption v2\\0').update(secret()).digest()}
 function sealSession(value){const iv=randomBytes(12);const cipher=createCipheriv('aes-256-gcm',encryptionKey(),iv);const ciphertext=Buffer.concat([cipher.update(JSON.stringify(value),'utf8'),cipher.final()]);return `v2.${iv.toString('base64url')}.${ciphertext.toString('base64url')}.${cipher.getAuthTag().toString('base64url')}`}
-export function createSessionToken(accessToken,refreshToken,user,expiresIn=3600,sessionExpiresAt=Date.now()+7*24*60*60*1000){return sealSession({accessToken,refreshToken,user,expiresAt:Date.now()+Math.max(0,(Number.isFinite(Number(expiresIn))?Number(expiresIn):3600)-30)*1000,sessionExpiresAt})}
+export function createSessionToken(accessToken,refreshToken,user,expiresIn=3600,sessionExpiresAt=Date.now()+7*24*60*60*1000){return sealSession({accessToken,refreshToken,user,expiresAt:Date.now()+((Number.isFinite(Number(expiresIn))?Number(expiresIn):3600)-30)*1000,sessionExpiresAt})}
 export function readSessionToken(token){
  const value=String(token||'');
  if(value.startsWith('v2.')){
@@ -35,7 +35,7 @@ async function refreshSession(session){if(!session?.refreshToken)return null;try
 function sessionHash(accessToken){return createHash('sha256').update(String(accessToken)).digest('hex')}
 async function sessionRevoked(session){
  if(!session?.accessToken||!session?.user?.id)return false;
- const hashes=[session.accessToken,session.refreshToken,session.previousAccessToken].filter(Boolean).map(sessionHash);
+ const hashes=[session.accessToken,session.refreshToken,session.previousAccessToken,session.previousRefreshToken].filter(Boolean).map(sessionHash);
  const rows=await sb(`/rest/v1/astracore_revoked_sessions?session_hash=in.(${hashes.join(',')})&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=session_hash&limit=2`,{headers:{Authorization:`Bearer ${session.accessToken}`}});
  return Array.isArray(rows)&&rows.length>0;
 }
@@ -66,7 +66,7 @@ export async function currentUser(req){
  if(Number(signed.expiresAt)>0&&Number(signed.expiresAt)<=Date.now()){
   const refreshed=await refreshSession(signed);if(!refreshed)return null;
   const refreshedSession=readSessionToken(refreshed.token);
-  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken,refreshToken:refreshedSession?.refreshToken||signed.refreshToken,previousAccessToken:signed.accessToken}))return null;
+  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken,refreshToken:refreshedSession?.refreshToken||signed.refreshToken,previousAccessToken:signed.accessToken,previousRefreshToken:signed.refreshToken}))return null;
   req.astracoreRefreshedSession=refreshed.token;req.astracoreAccessToken=refreshed.accessToken;return refreshed.user;
  }
  // Fail closed if the revocation store is unavailable; never silently accept an unchecked session.
