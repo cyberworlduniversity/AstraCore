@@ -140,7 +140,6 @@ export async function executeToolWithPolicy(tool, input, request = {}) {
         reject(Object.assign(new Error('Tool execution timed out'), { status: 504, code: 'TOOL_TIMEOUT' }));
         controller.abort(new Error('Tool execution deadline exceeded'));
       }, timeoutMs);
-      timer.unref?.();
     });
     const result = await Promise.race([execution, timeout]);
     const { serialized: outputJson } = jsonBytes(result, 'Tool output', MAX_OUTPUT_BYTES);
