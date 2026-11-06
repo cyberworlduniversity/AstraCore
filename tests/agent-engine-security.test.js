@@ -18,7 +18,11 @@ function setup() {
     },
     execute: async ({ query }) => ({ result: `found: ${query}` }),
   });
-  const engine = new AgentEngine({ toolRegistry: registry, maxSteps: 2 });
+  const engine = new AgentEngine({
+    toolRegistry: registry,
+    maxSteps: 2,
+    authorizeContext: async () => ({ authenticated: true, userId: 'user-1', allowedTools: ['safe_lookup'] }),
+  });
   const context = {
     authenticated: true,
     userId: 'user-1',
@@ -47,7 +51,10 @@ test('agent execution is blocked if caller identity or trusted audit writer is m
     inputSchema: { type: 'object', required: ['query'], additionalProperties: false, properties: { query: { type: 'string' } } },
     execute: async () => ({ result: 'should not run' }),
   });
-  const blockedEngine = new AgentEngine({ toolRegistry: registryWithoutAudit });
+  const blockedEngine = new AgentEngine({
+    toolRegistry: registryWithoutAudit,
+    authorizeContext: async () => ({ authenticated: true, userId: 'user-1', allowedTools: ['safe_lookup'] }),
+  });
   const result = await blockedEngine.run({
     task: 'run a tool',
     context,
@@ -70,5 +77,18 @@ test('agent execution rejects calls beyond configured step limit', async () => {
       ],
     }),
     (error) => error.status === 400,
+  );
+});
+
+test('agent rejects caller-supplied authentication flags without trusted resolver', async () => {
+  const { engine } = setup();
+  const untrustedEngine = new AgentEngine({ toolRegistry: engine.toolRegistry });
+  await assert.rejects(
+    untrustedEngine.run({
+      task: 'attempt to spoof authentication',
+      context: { authenticated: true, userId: 'attacker', allowedTools: ['safe_lookup'] },
+      toolCalls: [{ name: 'safe_lookup', input: { query: 'x' } }],
+    }),
+    (error) => error.status === 503,
   );
 });
