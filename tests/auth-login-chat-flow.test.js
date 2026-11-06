@@ -11,6 +11,7 @@ const { default: loginHandler } = await import('../api/auth/login.js');
 const { default: meHandler } = await import('../api/auth/me.js');
 const { default: logoutHandler } = await import('../api/auth/logout.js');
 const { default: apiHandler } = await import('../api/[...path].js');
+const { default: adminApiHandler } = await import('../api/admin/[...path].js');
 const { createSessionToken, sessionCookie } = await import('../server/auth.js');
 
 function responseCapture() {
@@ -108,6 +109,14 @@ test('login -> auth/me -> protected chat workspace API -> logout -> protected AP
       headers: { host: 'astracore.example', origin: 'https://evil.example', 'x-forwarded-proto': 'https', cookie },
     }, crossOriginMutationRes);
     assert.equal(crossOriginMutationRes.statusCode, 403);
+
+    const crossOriginAdminRes = responseCapture();
+    await adminApiHandler({
+      method: 'POST',
+      url: '/api/admin/users',
+      headers: { host: 'astracore.example', origin: 'https://evil.example', 'x-forwarded-proto': 'https', cookie },
+    }, crossOriginAdminRes);
+    assert.equal(crossOriginAdminRes.statusCode, 403);
 
     const crossOriginLogoutRes = responseCapture();
     await logoutHandler({
