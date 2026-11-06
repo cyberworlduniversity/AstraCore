@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { redactSecrets } from './safety-layer.js';
 
 const MAX_CODE_BYTES = 16 * 1024;
@@ -43,14 +44,24 @@ export class IsolatedPythonWorker {
     }
     const { image, dockerHost } = readSandboxConfig(this.env);
     const timeout = Math.min(Math.max(Number(timeoutMs) || DEFAULT_TIMEOUT_MS, 100), MAX_TIMEOUT_MS);
+    const containerName = 'astracore-job-' + randomUUID();
+    const spawnOptions = {
+      shell: false,
+      windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: {
+        PATH: this.env.PATH || '/usr/bin:/bin',
+        DOCKER_HOST: dockerHost,
+      },
+    };
     const args = [
       'run', '--rm', '--interactive', '--pull=never',
+      '--name=' + containerName,
       '--runtime=runsc',
       '--network=none',
       '--read-only',
       '--cap-drop=ALL',
       '--security-opt=no-new-privileges:true',
-      '--security-opt=seccomp=default',
       '--pids-limit=16',
       '--memory=64m',
       '--memory-swap=64m',
@@ -83,21 +94,21 @@ export class IsolatedPythonWorker {
       };
 
       try {
-        child = this.spawnProcess('docker', args, {
-          shell: false,
-          windowsHide: true,
-          stdio: ['pipe', 'pipe', 'pipe'],
-          env: {
-            PATH: this.env.PATH || '/usr/bin:/bin',
-            DOCKER_HOST: dockerHost,
-          },
-        });
+        child = this.spawnProcess('docker', args, spawnOptions);
       } catch {
         finishReject(sandboxError('Unable to start isolated worker', 503, 'SANDBOX_START_FAILED'));
         return;
       }
 
       const kill = () => {
+        // Kill the container through the dedicated daemon before stopping the attached CLI.
+        // The random name is generated here and is never derived from user input.
+        try {
+          const killer = this.spawnProcess('docker', ['kill', containerName], {
+            shell: false, windowsHide: true, stdio: 'ignore', env: spawnOptions.env,
+          });
+          killer.on('error', () => {});
+        } catch { /* daemon may not have created the container */ }
         try { child.kill('SIGKILL'); } catch { /* process may already have exited */ }
       };
       const collect = (target, chunk) => {
