@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import { IsolatedPythonWorker, ISOLATED_WORKER_LIMITS } from '../src/core/isolated-python-worker.js';
+import { IsolatedPythonWorker, ISOLATED_WORKER_LIMITS, createIsolatedPythonTool } from '../src/core/isolated-python-worker.js';
 
 const IMAGE = 'registry.example/astracore-python@sha256:' + 'a'.repeat(64);
 const ENV = {
@@ -111,4 +111,34 @@ test('sandbox bounds combined stdout and stderr and redacts secrets', async () =
   });
   const result = await redacting.run({ code: 'print("secret")' });
   assert.equal(result.stdout, '[REDACTED_SECRET]');
+});
+
+test('worker adapter is disabled by default and requires explicit operator opt-in', () => {
+  const worker = { run: async () => ({ exitCode: 0, stdout: '', stderr: '' }) };
+  const disabled = createIsolatedPythonTool(worker);
+  assert.equal(disabled.status, 'disabled');
+  assert.equal(disabled.risk, 'high');
+  assert.equal(disabled.timeoutMs, 6_000);
+  assert.equal(createIsolatedPythonTool(worker, { enabled: true }).status, 'enabled');
+  assert.throws(() => createIsolatedPythonTool({}), /IsolatedPythonWorker instance/);
+});
+
+test('worker supports abort signals and fails with a cancellation status', async () => {
+  const fake = fakeSpawn({ closeDelay: 500 });
+  const worker = new IsolatedPythonWorker({ env: ENV, spawnProcess: fake.spawnProcess });
+  const controller = new AbortController();
+  const pending = worker.run({ code: 'while True: pass', signal: controller.signal });
+  setTimeout(() => controller.abort(), 20);
+  await assert.rejects(pending, (error) => error.code === 'SANDBOX_ABORTED' && error.status === 499);
+});
+
+test('worker reports process launch errors without exposing host execution fallback', async () => {
+  const worker = new IsolatedPythonWorker({
+    env: ENV,
+    spawnProcess: () => { throw new Error('simulated spawn failure'); },
+  });
+  await assert.rejects(
+    worker.run({ code: 'print(1)' }),
+    (error) => error.code === 'SANDBOX_START_FAILED' && error.status === 503,
+  );
 });
