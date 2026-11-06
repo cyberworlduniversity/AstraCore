@@ -27,9 +27,14 @@ function assertJsonData(value, path = '$', depth = 0) {
   }
   if (Array.isArray(value)) {
     if (Object.getPrototypeOf(value) !== Array.prototype) fail('Invalid array prototype at ' + path);
+    if (Object.getOwnPropertySymbols(value).length) fail('Symbol properties are not allowed at ' + path);
+    const allowedKeys = new Set(['length', ...Array.from({ length: value.length }, (_, index) => String(index))]);
+    for (const key of Reflect.ownKeys(value)) if (!allowedKeys.has(key)) fail('Unexpected array property at ' + path);
     for (let index = 0; index < value.length; index += 1) {
-      if (!Object.prototype.hasOwnProperty.call(value, index)) fail('Sparse arrays are not allowed at ' + path);
-      assertJsonData(value[index], path + '[' + index + ']', depth + 1);
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor) fail('Sparse arrays are not allowed at ' + path);
+      if (!Object.prototype.hasOwnProperty.call(descriptor, 'value')) fail('Accessors are not allowed at ' + path + '[' + index + ']');
+      assertJsonData(descriptor.value, path + '[' + index + ']', depth + 1);
     }
     return;
   }
@@ -137,6 +142,7 @@ function safeAuditEvent(event) {
 export async function executeToolWithPolicy(tool, input, request = {}) {
   const requestId = String(request.requestId || randomUUID()).slice(0, 128);
   const principalId = String(request.userId || request.principalId || '').slice(0, 128);
+  if (request.authenticated !== true) fail('Authentication required', 401, 'TOOL_NOT_AUTHORIZED');
   if (!principalId) fail('Authenticated principal ID is required for tool execution', 401, 'PRINCIPAL_REQUIRED');
   if (typeof request.audit !== 'function') fail('A trusted audit writer is required before tool execution', 503, 'AUDIT_UNAVAILABLE');
   if (typeof tool?.execute !== 'function') fail('Tool adapter is not implemented', 501, 'TOOL_NOT_IMPLEMENTED');
