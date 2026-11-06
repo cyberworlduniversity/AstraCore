@@ -1,6 +1,12 @@
 import { buildAgentPlan } from './step16-27.js';
 import { executeToolWithPolicy } from './tool-execution-boundary.js';
 
+function freezeSchema(value) {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) freezeSchema(child);
+  return Object.freeze(value);
+}
+
 export class ToolRegistry {
   constructor() { this.tools = new Map(); }
 
@@ -8,7 +14,8 @@ export class ToolRegistry {
     if (!tool?.name || typeof tool.name !== 'string') throw new Error('tool name required');
     if (!tool.inputSchema || tool.inputSchema.type !== 'object') throw new Error('tool input schema must be a JSON object schema');
     if (tool.execute !== undefined && typeof tool.execute !== 'function') throw new Error('tool execute must be a function');
-    this.tools.set(tool.name, Object.freeze({ ...tool }));
+    const definition = Object.freeze({ ...tool, inputSchema: freezeSchema(structuredClone(tool.inputSchema)) });
+    this.tools.set(tool.name, definition);
     return tool.name;
   }
 
