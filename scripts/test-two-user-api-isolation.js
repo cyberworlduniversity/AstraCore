@@ -101,7 +101,7 @@ try {
   cleanup.push(async () => app(a, '/api/memory/' + encodeURIComponent(memoryId), { method: 'DELETE' }));
 
   const knowledge = await app(a, '/api/knowledge/upload', {
-    method: 'POST', body: JSON.stringify({ name: 'api-rls-' + randomUUID() + '.txt', content: 'Temporary private knowledge fixture for API isolation testing.' }),
+    method: 'POST', body: JSON.stringify({ name: 'api-rls-' + randomUUID() + '.txt', content: 'Temporary private knowledge fixture ' + randomUUID() }),
   });
   assert.ok([200, 201].includes(knowledge.status), 'User A knowledge fixture creation failed.');
   const documentId = knowledge.data.document.id;
