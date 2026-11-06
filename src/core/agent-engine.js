@@ -1,35 +1,76 @@
-import { assertToolAuthorization, verifyToolResult, redactSecrets } from './safety-layer.js';
+import { verifyToolResult } from './safety-layer.js';
 
 export const AGENT_ROLES = Object.freeze(['planner','researcher','coder','analyst','document','security','browser']);
 
 export class AgentEngine {
-  constructor({ toolRegistry, executeTool, maxSteps = 8 } = {}) {
+  constructor({ toolRegistry, maxSteps = 8 } = {}) {
     this.toolRegistry = toolRegistry;
-    this.executeTool = executeTool;
     this.maxSteps = Math.min(Math.max(Number(maxSteps) || 8, 1), 20);
   }
 
   plan(task, role = 'planner') {
     if (!AGENT_ROLES.includes(role)) throw Object.assign(new Error('Unknown agent role'), { status: 400 });
-    return { role, steps: [{ action: 'understand', task: String(task).slice(0, 4000) }, { action: 'verify' }, { action: 'respond' }] };
+    return {
+      role,
+      steps: [
+        { action: 'understand', task: String(task).slice(0, 4000) },
+        { action: 'verify' },
+        { action: 'respond' },
+      ],
+    };
   }
 
-  async run({ task, role = 'planner', context = {}, tools = [] } = {}) {
+  async run({ task, role = 'planner', context = {}, toolCalls = [], tools = [] } = {}) {
     const plan = this.plan(task, role);
-    const results = [];
-    for (const toolName of tools.slice(0, this.maxSteps)) {
-      const tool = this.toolRegistry?.get(toolName);
-      assertToolAuthorization(tool, context);
-      if (typeof this.executeTool !== 'function') throw Object.assign(new Error('Tool executor is not configured'), { status: 501 });
-      const started = Date.now();
-      const result = await Promise.race([
-        Promise.resolve(this.executeTool(tool, { task, context })),
-        new Promise((_, reject) => setTimeout(() => reject(Object.assign(new Error('Tool timeout'), { status: 504 })), Math.min(tool.timeoutMs || 15000, 30000)))
-      ]);
-      const verification = verifyToolResult(result);
-      results.push({ tool: toolName, durationMs: Date.now() - started, verification, result: verification.valid ? redactSecrets(JSON.stringify(result)).slice(0, 12000) : null });
-      if (!verification.valid) break;
+    if (!this.toolRegistry || typeof this.toolRegistry.execute !== 'function') {
+      throw Object.assign(new Error('Policy-enforced tool registry is not configured'), { status: 501 });
     }
-    return { plan, results, status: results.every((item) => item.verification.valid) ? 'completed' : 'blocked' };
+    const calls = Array.isArray(toolCalls) && toolCalls.length
+      ? toolCalls
+      : tools.slice(0, this.maxSteps).map((name) => ({ name, input: { task: String(task).slice(0, 4000) } }));
+    if (!Array.isArray(calls) || calls.length > this.maxSteps) {
+      throw Object.assign(new Error('Agent tool-call limit exceeded'), { status: 400 });
+    }
+
+    const results = [];
+    for (const call of calls) {
+      if (!call || typeof call.name !== 'string' || !call.name) {
+        throw Object.assign(new Error('Each agent tool call requires a tool name'), { status: 400 });
+      }
+      const started = Date.now();
+      try {
+        const result = await this.toolRegistry.execute(call.name, call.input, {
+          authenticated: context.authenticated === true,
+          isAdmin: context.isAdmin === true,
+          explicitApproval: context.explicitApproval === true,
+          allowedTools: context.allowedTools,
+          userId: context.userId,
+          requestId: context.requestId,
+          audit: context.audit,
+        });
+        const verification = verifyToolResult(result);
+        results.push({
+          tool: call.name,
+          durationMs: Date.now() - started,
+          verification,
+          result: verification.valid ? result : null,
+        });
+        if (!verification.valid) break;
+      } catch (error) {
+        results.push({
+          tool: call.name,
+          durationMs: Date.now() - started,
+          verification: { valid: false, reason: String(error.code || error.message || 'tool_failed').slice(0, 500) },
+          result: null,
+        });
+        break;
+      }
+    }
+
+    return {
+      plan,
+      results,
+      status: results.every((item) => item.verification.valid) ? 'completed' : 'blocked',
+    };
   }
 }
