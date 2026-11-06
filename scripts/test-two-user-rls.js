@@ -51,6 +51,7 @@ async function assertRowIsPrivate(table, idColumn, id, label) {
     astracore_conversations: ['title', 'RLS test owner-only'],
     astracore_memory_records: ['content', 'RLS test owner-only'],
     astracore_projects: ['name', 'RLS test owner-only'],
+    astracore_knowledge_sources: ['name', 'RLS test owner-only'],
     astracore_knowledge_documents: ['title', 'RLS test owner-only'],
     astracore_knowledge_chunks: ['content', 'RLS test owner-only'],
     astracore_messages: ['content', 'RLS test owner-only'],
@@ -106,9 +107,14 @@ try {
   });
   created.push(['astracore_projects', 'id', projectId]);
 
+  const sourceId = await create('astracore_knowledge_sources', {
+    user_id: ownerId, name: 'RLS test ' + randomUUID(), source_type: 'local_file',
+  });
+  created.push(['astracore_knowledge_sources', 'id', sourceId]);
+
   const documentId = await create('astracore_knowledge_documents', {
-    user_id: ownerId, title: 'RLS test ' + randomUUID(), source: 'automated-isolation-test',
-    document_type: 'text', content_hash: randomUUID(),
+    user_id: ownerId, source_id: sourceId, title: 'RLS test ' + randomUUID(), source: 'automated-isolation-test',
+    document_type: 'txt', content_hash: randomUUID(),
   });
   created.push(['astracore_knowledge_documents', 'id', documentId]);
 
