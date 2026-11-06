@@ -23,9 +23,9 @@ function setup() {
   });
   const engine = new AgentEngine({ toolRegistry: registry, maxSteps: 2 });
   const context = {
-    authenticated: true,
-    userId: 'user-1',
-    allowedTools: ['safe_lookup'],
+    authenticated: false,
+    userId: 'spoofed-user',
+    allowedTools: ['attacker_tool'],
   };
   return { engine, context, events };
 }
