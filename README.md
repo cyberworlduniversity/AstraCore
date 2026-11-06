@@ -30,3 +30,5 @@ See `docs/ASTRACORE_AI_ARCHITECTURE.md` for the initial architecture.
 See `docs/CHECKPOINT_CERTIFICATION.md` for experimental checkpoint integrity verification.
 
 See `docs/BEHAVIORAL_EVALUATION.md` for running the deterministic behavioral benchmark.
+
+See `docs/ADVERSARIAL_EVALUATION.md` for the local adversarial response evaluation suite.
