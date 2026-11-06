@@ -1,6 +1,9 @@
+import { executeToolWithPolicy } from './tool-execution-boundary.js';
+
 export class ToolRegistry {
   constructor(definitions = []) {
-    this.tools = new Map(definitions.map((tool) => [tool.name, Object.freeze({ ...tool })]));
+    this.tools = new Map();
+    for (const tool of definitions) this.register(tool);
   }
 
   register(tool) {
@@ -10,7 +13,7 @@ export class ToolRegistry {
   }
 
   get(name) { return this.tools.get(name) || null; }
-  list() { return [...this.tools.values()]; }
+  list() { return [...this.tools.values()].map(({ execute, ...metadata }) => metadata); }
 
   assertAllowed(name, { authenticated = false, allowedTools = [] } = {}) {
     const tool = this.get(name);
@@ -23,11 +26,22 @@ export class ToolRegistry {
     }
     return tool;
   }
+
+  async execute(name, input, request = {}) {
+    const registered = this.assertAllowed(name, request);
+    const tool = {
+      ...registered,
+      enabled: registered.status === 'enabled',
+      risk: registered.risk || registered.riskLevel || 'low',
+      timeoutMs: registered.timeoutMs || registered.timeout_ms,
+    };
+    return executeToolWithPolicy(tool, input, request);
+  }
 }
 
 export function defaultToolDefinitions() {
   return [
-    { name: 'file_search', description: 'Search user-owned indexed knowledge.', inputSchema: { type: 'object' }, status: 'enabled', riskLevel: 'low' },
+    { name: 'file_search', description: 'Search user-owned indexed knowledge.', inputSchema: { type: 'object', properties: { query: { type: 'string', minLength: 1, maxLength: 1000 } }, required: ['query'], additionalProperties: false }, status: 'enabled', riskLevel: 'low' },
     { name: 'web_search', description: 'Search current public web information with citations.', inputSchema: { type: 'object' }, status: 'not_implemented', riskLevel: 'medium' },
     { name: 'calculator', description: 'Perform deterministic calculations.', inputSchema: { type: 'object' }, status: 'not_implemented', riskLevel: 'low' },
     { name: 'code_execution', description: 'Run Python in an isolated sandbox.', inputSchema: { type: 'object' }, status: 'not_implemented', riskLevel: 'high' },
