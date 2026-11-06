@@ -45,7 +45,7 @@ def test_training_report_matches_saved_best_checkpoint(tmp_path):
          'text': ('astra core tests language model security and safe systems. ' * 30)},
     ]
     (corpus / 'records.jsonl').write_text(
-        ''.join(json.dumps(row) + '\\n' for row in rows), encoding='utf-8'
+        ''.join(json.dumps(row) + '\n' for row in rows), encoding='utf-8'
     )
     output = tmp_path / 'checkpoint'
     script = Path(__file__).resolve().parents[1] / 'scripts' / 'train_lm.py'
@@ -74,7 +74,7 @@ def test_training_report_matches_saved_best_checkpoint(tmp_path):
 
     tokenizer = AstraTokenizer.load(output / 'tokenizer.json')
     splits, _ = read_dataset(corpus)
-    test_ids = tokenizer.encode('\\n\\n'.join(splits['test']))
+    test_ids = tokenizer.encode('\n\n'.join(splits['test']))
     test_dataset = TokenBlocks(test_ids, context_length=config.context_length)
     model = AstraCoreLM(config)
     model.load_state_dict(checkpoint['model'], strict=True)
