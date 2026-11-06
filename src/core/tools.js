@@ -1,6 +1,6 @@
 import { executeToolWithPolicy } from './tool-execution-boundary.js';
 
-export class ToolRegistry {
+function freezeSchema(value) {\n  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;\n  for (const child of Object.values(value)) freezeSchema(child);\n  return Object.freeze(value);\n}\n\nexport class ToolRegistry {
   constructor(definitions = []) {
     this.tools = new Map();
     for (const tool of definitions) this.register(tool);
@@ -8,7 +8,7 @@ export class ToolRegistry {
 
   register(tool) {
     if (!tool?.name || !tool?.description || !tool?.inputSchema) throw new Error('Invalid tool definition');
-    this.tools.set(tool.name, Object.freeze({ ...tool }));
+    this.tools.set(tool.name, Object.freeze({ ...tool, inputSchema: freezeSchema(structuredClone(tool.inputSchema)) }));
     return this.tools.get(tool.name);
   }
 
