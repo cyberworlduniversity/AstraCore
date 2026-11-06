@@ -69,7 +69,7 @@ export async function handleProductionRoute({ req, res, url, user, readBody, jso
   if (path.startsWith('/api/memory/') && req.method === 'DELETE') {
     const id = path.split('/')[3];
     if (!id) return json(res, 400, { error: 'memory id is required' });
-    const rows = await supabaseUserRequest(req, `${activeMemoryFilter(user.id)}&memory_id=eq.${encodeURIComponent(id)}&select=memory_id&limit=1`);
+    const rows = await supabaseUserRequest(req, `/rest/v1/astracore_memory_records?user_id=eq.${encodeURIComponent(user.id)}&memory_id=eq.${encodeURIComponent(id)}&select=memory_id&limit=1`);
     if (!rows[0]) return json(res, 404, { error: 'Memory not found' });
     await supabaseUserRequest(req, `/rest/v1/astracore_memory_records?memory_id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(user.id)}`, { method: 'DELETE' });
     return json(res, 200, { ok: true, memory_id: id });
