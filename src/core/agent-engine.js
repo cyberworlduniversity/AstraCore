@@ -3,9 +3,8 @@ import { verifyToolResult } from './safety-layer.js';
 export const AGENT_ROLES = Object.freeze(['planner','researcher','coder','analyst','document','security','browser']);
 
 export class AgentEngine {
-  constructor({ toolRegistry, authorizeContext, maxSteps = 8 } = {}) {
+  constructor({ toolRegistry, maxSteps = 8 } = {}) {
     this.toolRegistry = toolRegistry;
-    this.authorizeContext = authorizeContext;
     this.maxSteps = Math.min(Math.max(Number(maxSteps) || 8, 1), 20);
   }
 
@@ -26,14 +25,6 @@ export class AgentEngine {
     if (!this.toolRegistry || typeof this.toolRegistry.execute !== 'function') {
       throw Object.assign(new Error('Policy-enforced tool registry is not configured'), { status: 501 });
     }
-    if (typeof this.authorizeContext !== 'function') {
-      throw Object.assign(new Error('Trusted server authorization resolver is not configured'), { status: 503 });
-    }
-    const authorization = await this.authorizeContext(context);
-    if (!authorization || authorization.authenticated !== true || !authorization.userId) {
-      throw Object.assign(new Error('Trusted authenticated principal is required'), { status: 401 });
-    }
-
     const calls = Array.isArray(toolCalls) && toolCalls.length
       ? toolCalls
       : (Array.isArray(tools) ? tools : []).slice(0, this.maxSteps).map((name) => ({ name, input: { task: String(task).slice(0, 4000) } }));
@@ -48,14 +39,7 @@ export class AgentEngine {
       }
       const started = Date.now();
       try {
-        const result = await this.toolRegistry.execute(call.name, call.input, {
-          authenticated: true,
-          isAdmin: authorization.isAdmin === true,
-          explicitApproval: authorization.explicitApproval === true,
-          allowedTools: authorization.allowedTools,
-          userId: authorization.userId,
-          requestId: authorization.requestId,
-        });
+        const result = await this.toolRegistry.execute(call.name, call.input, context);
         const verification = verifyToolResult(result);
         results.push({
           tool: call.name,
