@@ -166,7 +166,7 @@ def main():
         code = 1
     output = Path(args.report)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(report, indent=2, ensure_ascii=False) + '\\n', encoding='utf-8')
+    output.write_text(json.dumps(report, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
     print(json.dumps({
         'status': report['status'],
         'production_approved': False,
