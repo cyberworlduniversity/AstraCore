@@ -189,7 +189,7 @@ test('public registry uses its injected audit writer and keeps code execution di
     auditWriter: req.audit,
     authorizeContext: async () => ({ authenticated: true, userId: 'user-1', allowedTools: ['lookup'] }),
   });
-  assert.deepEqual(await publicRegistry.execute('lookup', { query: 'ok' }, { authenticated: true, userId: 'user-1' }), { answer: 'ok' });
+  assert.deepEqual(await publicRegistry.execute('lookup', { query: 'ok' }, {}), { answer: 'ok' });
   const defaults = defaultToolDefinitions();
   assert.equal(defaults.find((item) => item.name === 'code_execution').status, 'not_implemented');
 });
