@@ -6,6 +6,7 @@ export { ToolRegistry, defaultToolDefinitions } from './tools.js';
 export { sourceRecord, sourceList, groundRetrievedContent } from './source.js';
 export { assertMemoryInput } from './memory.js';
 export { assertToolAuthorization, verifyToolResult, redactSecrets, classifyUntrustedText, SAFETY_POLICY } from './safety-layer.js';
+export { executeToolWithPolicy } from './tool-execution-boundary.js';
 export { AgentEngine, AGENT_ROLES } from './agent-engine.js';
 export { MULTIMODAL_CAPABILITIES, classifyMedia, buildDocumentPipeline } from './multimodal.js';
 export { createResearchPlan, runResearch } from './web-research.js';
