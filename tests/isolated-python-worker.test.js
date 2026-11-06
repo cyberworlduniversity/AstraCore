@@ -117,9 +117,12 @@ test('worker adapter is disabled by default and requires explicit operator opt-i
   const worker = { run: async () => ({ exitCode: 0, stdout: '', stderr: '' }) };
   const disabled = createIsolatedPythonTool(worker);
   assert.equal(disabled.status, 'disabled');
+  assert.equal(disabled.enabled, false);
   assert.equal(disabled.risk, 'high');
   assert.equal(disabled.timeoutMs, 6_000);
-  assert.equal(createIsolatedPythonTool(worker, { enabled: true }).status, 'enabled');
+  const enabled = createIsolatedPythonTool(worker, { enabled: true });
+  assert.equal(enabled.status, 'enabled');
+  assert.equal(enabled.enabled, true);
   assert.throws(() => createIsolatedPythonTool({}), /IsolatedPythonWorker instance/);
 });
 
