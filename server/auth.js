@@ -12,7 +12,7 @@ function secret(){if(SESSION_SECRET)return SESSION_SECRET;if(isProduction)throw 
 function sign(v){return createHmac('sha256',secret()).update(v).digest('hex')}
 function encryptionKey(){return createHash('sha256').update('AstraCore session encryption v2\\0').update(secret()).digest()}
 function sealSession(value){const iv=randomBytes(12);const cipher=createCipheriv('aes-256-gcm',encryptionKey(),iv);const ciphertext=Buffer.concat([cipher.update(JSON.stringify(value),'utf8'),cipher.final()]);return `v2.${iv.toString('base64url')}.${ciphertext.toString('base64url')}.${cipher.getAuthTag().toString('base64url')}`}
-export function createSessionToken(accessToken,refreshToken,user,expiresIn=3600,sessionExpiresAt=Date.now()+7*24*60*60*1000){return sealSession({accessToken,refreshToken,user,expiresAt:Date.now()+Math.max(60,Number(expiresIn)-30)*1000,sessionExpiresAt})}
+export function createSessionToken(accessToken,refreshToken,user,expiresIn=3600,sessionExpiresAt=Date.now()+7*24*60*60*1000){return sealSession({accessToken,refreshToken,user,expiresAt:Date.now()+Math.max(0,(Number.isFinite(Number(expiresIn))?Number(expiresIn):3600)-30)*1000,sessionExpiresAt})}
 export function readSessionToken(token){
  const value=String(token||'');
  if(value.startsWith('v2.')){
