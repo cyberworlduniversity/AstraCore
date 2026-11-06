@@ -7,7 +7,7 @@ The tool registry now routes calls through one policy-enforced execution boundar
 - Requires a trusted server-side authorization resolver, authenticated principal, per-user tool allow-list, and constructor-injected audit writer. Request-supplied authentication flags and audit callbacks are not trusted.
 - Requires the tool to be explicitly enabled and present in the resolved principal's allow-list.
 - Requires explicit approval for high-risk tools.
-- Validates JSON-object inputs against the registered schema, including required fields, primitive types, bounds, and unknown-property rejection when configured.
+- Validates JSON-object inputs against the registered schema, including required fields, primitive types, bounds, and undeclared-property rejection by default.
 - Applies a 64 KiB input limit, a per-tool deadline capped at 30 seconds, and a 64 KiB JSON output limit.
 - Sends an AbortSignal to the adapter on timeout.
 - Redacts common secret patterns in returned text and writes metadata-only start/completion/failure audit events.
