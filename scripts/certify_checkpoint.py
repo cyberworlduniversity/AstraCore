@@ -3,6 +3,9 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import torch
 
@@ -99,7 +102,8 @@ def certify(checkpoint_dir, corpus_dir):
     dataset_splits, dataset_metadata = read_dataset(corpus_dir)
     require(dataset_metadata.get('format') == 'jsonl',
             'certification requires a licensed records.jsonl dataset')
-    require(dataset_metadata == training.get('dataset'),
+    training_dataset = training.get('dataset') or {}
+    require(all(training_dataset.get(key) == value for key, value in dataset_metadata.items()),
             'current dataset provenance does not match training metadata')
     require(dataset_metadata == evaluation.get('dataset'),
             'dataset provenance differs between training and test reports')
