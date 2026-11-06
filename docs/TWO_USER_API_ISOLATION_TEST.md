@@ -31,6 +31,7 @@ Run locally in a controlled staging environment with `npm run test:api-rls`. If 
 - Confirms two different accounts can log in through AstraCore and that `/api/auth/me` returns the correct identities.
 - Verifies cross-user isolation for conversation list/read/delete, memory list/delete, knowledge list/delete, project list/delete, and file list/download/delete routes.
 - Confirms User A retains access to their own fixtures after User B's denied requests.
-- Does not claim chat generation is tested: `/api/chat` remains gated until a production-approved model checkpoint is configured.
+- If a production-ready model is loaded, sends a short chat request and verifies the resulting conversation is visible to User A but not User B.
+- If the model is not ready, verifies `/api/chat` returns HTTP 503 without creating a conversation. This validates the model gate, not chat generation or cross-user chat writes.
 
 A skipped test is not a pass. A successful test proves the listed API behavior only for the tested staging deployment and accounts; it is not a substitute for full production penetration testing.
