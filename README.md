@@ -28,3 +28,5 @@ AstraCore v0.1 is an engineering foundation, not a claim of GPT-class capability
 See `docs/ASTRACORE_AI_ARCHITECTURE.md` for the initial architecture.
 
 See `docs/CHECKPOINT_CERTIFICATION.md` for experimental checkpoint integrity verification.
+
+See `docs/BEHAVIORAL_EVALUATION.md` for running the deterministic behavioral benchmark.
