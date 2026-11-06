@@ -83,19 +83,20 @@ test('sandbox uses fixed gVisor, no-network, no-mount, read-only resource-limite
 });
 
 test('sandbox clamps timeout and kills an over-time worker', async () => {
-  let childRef;
+  const children = [];
   const fake = fakeSpawn({ closeDelay: 500 });
   const spawnProcess = (...args) => {
-    childRef = fake.spawnProcess(...args);
-    return childRef;
+    const child = fake.spawnProcess(...args);
+    children.push(child);
+    return child;
   };
   const worker = new IsolatedPythonWorker({ env: ENV, spawnProcess });
   await assert.rejects(
     worker.run({ code: 'while True: pass', timeoutMs: 100 }),
     (error) => error.code === 'SANDBOX_TIMEOUT' && error.status === 504,
   );
-  assert.equal(childRef.killed, true);
-  assert.equal(childRef.killSignal, 'SIGKILL');
+  assert.equal(children[0].killed, true);
+  assert.equal(children[0].killSignal, 'SIGKILL');
 });
 
 test('sandbox bounds combined stdout and stderr and redacts secrets', async () => {

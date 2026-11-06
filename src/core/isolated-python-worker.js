@@ -136,7 +136,7 @@ export class IsolatedPythonWorker {
         if (settled) return;
         settled = true;
         if (timer) clearTimeout(timer);
-        signal?.removeEventListener('abort', onAbort);
+        abortSignal?.removeEventListener('abort', onAbort);
         const durationMs = Date.now() - started;
         if (timedOut) {
           reject(sandboxError('Isolated worker exceeded its execution deadline', 504, 'SANDBOX_TIMEOUT'));

@@ -12,7 +12,7 @@ function secret(){if(SESSION_SECRET)return SESSION_SECRET;if(isProduction)throw 
 function sign(v){return createHmac('sha256',secret()).update(v).digest('hex')}
 function encryptionKey(){return createHash('sha256').update('AstraCore session encryption v2\\0').update(secret()).digest()}
 function sealSession(value){const iv=randomBytes(12);const cipher=createCipheriv('aes-256-gcm',encryptionKey(),iv);const ciphertext=Buffer.concat([cipher.update(JSON.stringify(value),'utf8'),cipher.final()]);return `v2.${iv.toString('base64url')}.${ciphertext.toString('base64url')}.${cipher.getAuthTag().toString('base64url')}`}
-export function createSessionToken(accessToken,refreshToken,user,expiresIn=3600,sessionExpiresAt=Date.now()+7*24*60*60*1000){return sealSession({accessToken,refreshToken,user,expiresAt:Date.now()+Math.max(0,(Number.isFinite(Number(expiresIn))?Number(expiresIn):3600)-30)*1000,sessionExpiresAt})}
+export function createSessionToken(accessToken,refreshToken,user,expiresIn=3600,sessionExpiresAt=Date.now()+7*24*60*60*1000){return sealSession({accessToken,refreshToken,user,expiresAt:Date.now()+((Number.isFinite(Number(expiresIn))?Number(expiresIn):3600)-30)*1000,sessionExpiresAt})}
 export function readSessionToken(token){
  const value=String(token||'');
  if(value.startsWith('v2.')){
@@ -35,7 +35,7 @@ async function refreshSession(session){if(!session?.refreshToken)return null;try
 function sessionHash(accessToken){return createHash('sha256').update(String(accessToken)).digest('hex')}
 async function sessionRevoked(session){
  if(!session?.accessToken||!session?.user?.id)return false;
- const hashes=[session.accessToken,session.refreshToken,session.previousAccessToken].filter(Boolean).map(sessionHash);
+ const hashes=[session.accessToken,session.refreshToken,session.previousAccessToken,session.previousRefreshToken].filter(Boolean).map(sessionHash);
  const rows=await sb(`/rest/v1/astracore_revoked_sessions?session_hash=in.(${hashes.join(',')})&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=session_hash&limit=2`,{headers:{Authorization:`Bearer ${session.accessToken}`}});
  return Array.isArray(rows)&&rows.length>0;
 }
@@ -66,7 +66,7 @@ export async function currentUser(req){
  if(Number(signed.expiresAt)>0&&Number(signed.expiresAt)<=Date.now()){
   const refreshed=await refreshSession(signed);if(!refreshed)return null;
   const refreshedSession=readSessionToken(refreshed.token);
-  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken,refreshToken:refreshedSession?.refreshToken||signed.refreshToken,previousAccessToken:signed.accessToken}))return null;
+  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken,refreshToken:refreshedSession?.refreshToken||signed.refreshToken,previousAccessToken:signed.accessToken,previousRefreshToken:signed.refreshToken}))return null;
   req.astracoreRefreshedSession=refreshed.token;req.astracoreAccessToken=refreshed.accessToken;return refreshed.user;
  }
  // Fail closed if the revocation store is unavailable; never silently accept an unchecked session.
@@ -74,7 +74,7 @@ export async function currentUser(req){
  try{return await userFromToken(signed.accessToken)}catch{
   const refreshed=await refreshSession(signed);if(!refreshed)return null;
   const refreshedSession=readSessionToken(refreshed.token);
-  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken,refreshToken:refreshedSession?.refreshToken||signed.refreshToken,previousAccessToken:signed.accessToken}))return null;
+  if(await sessionRevoked({...signed,accessToken:refreshed.accessToken,refreshToken:refreshedSession?.refreshToken||signed.refreshToken,previousAccessToken:signed.accessToken,previousRefreshToken:signed.refreshToken}))return null;
   req.astracoreRefreshedSession=refreshed.token;req.astracoreAccessToken=refreshed.accessToken;return refreshed.user
  }
 }
@@ -82,9 +82,10 @@ function sessionFromRequest(req){const signed=readSessionToken(parseCookie(req,'
 export function supabaseAccessToken(req){const session=sessionFromRequest(req);return req.astracoreAccessToken||session?.accessToken||''}
 export async function supabaseUserRequest(req,path,options={}){const accessToken=supabaseAccessToken(req);if(!accessToken)throw Object.assign(new Error('Login required'),{status:401});return sb(path,{...options,headers:{Authorization:`Bearer ${accessToken}`,...(options.headers||{})}})}
 async function authResult(data){if(!data.user)return{user:null,token:null};const user=publicUser(data.user);return{user,token:data.access_token?makeSession(data.access_token,data.refresh_token,user,data.expires_in):null}}
-async function sendEmailVerificationOtp(email){return sb('/auth/v1/otp',{method:'POST',body:JSON.stringify({email:normalizeEmail(email),options:{should_create_user:false}})})}
-async function verifyEmailOtp(email,code){const data=await sb('/auth/v1/verify',{method:'POST',body:JSON.stringify({email:normalizeEmail(email),token:String(code||'').trim(),type:'email'})});return authResult(data)}
-export async function signup(email,password,name){email=normalizeEmail(email);if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||String(password||'').length<8)throw Object.assign(new Error('Use a valid email and a password of at least 8 characters.'),{status:400});const result=await authResult(await sb('/auth/v1/signup',{method:'POST',body:JSON.stringify({email,password,data:{name:String(name||email.split('@')[0]).slice(0,80)}})}));if(!result.token&&result.user){try{await sendEmailVerificationOtp(email)}catch(error){throw Object.assign(new Error(`Account created, but the verification email could not be sent: ${error.message}`),{status:502})}return{...result,verificationRequired:true}}return result}
+async function resendEmailSignupOtp(email){return sb('/auth/v1/resend',{method:'POST',body:JSON.stringify({email:normalizeEmail(email),type:'signup'})})}
+async function verifyEmailOtp(email,code){const data=await sb('/auth/v1/verify',{method:'POST',body:JSON.stringify({email:normalizeEmail(email),token:String(code||'').trim(),type:'signup'})});return authResult(data)}
+export async function signup(email,password,name){email=normalizeEmail(email);if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||String(password||'').length<8)throw Object.assign(new Error('Use a valid email and a password of at least 8 characters.'),{status:400});const result=await authResult(await sb('/auth/v1/signup',{method:'POST',body:JSON.stringify({email,password,data:{name:String(name||email.split('@')[0]).slice(0,80)}})}));if(!result.token&&result.user)return{...result,verificationRequired:true};return result}
+export async function resendSignupVerification(email){email=normalizeEmail(email);if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw Object.assign(new Error('Enter a valid email address.'),{status:400});await resendEmailSignupOtp(email);return{sent:true}}
 export async function login(email,password){email=normalizeEmail(email);if(!email||!password)throw Object.assign(new Error('Email and password are required.'),{status:400});if(/^\d{6}$/.test(String(password).trim()))return verifyEmailOtp(email,password);return authResult(await sb('/auth/v1/token?grant_type=password',{method:'POST',body:JSON.stringify({email,password})}))}
 export function oauthStart(provider){if(!['google','github'].includes(provider))throw Object.assign(new Error('Unsupported login provider'),{status:400});if(!SUPABASE_URL)throw Object.assign(new Error('AstraCore Supabase authentication is not configured.'),{status:503});return`${SUPABASE_URL}/auth/v1/authorize?provider=${encodeURIComponent(provider)}&redirect_to=${encodeURIComponent(`${PUBLIC_URL}/`)}`}
 export async function listUsers(req){const accessToken=supabaseAccessToken(req);if(!accessToken)return[];const signed=sessionFromRequest(req);if(!signed||!isAdmin(signed.user))return[];return sb('/rest/v1/astracore_users?select=id,auth_user_id,email,name,provider,is_admin,created_at,updated_at&order=created_at.desc',{headers:{Authorization:`Bearer ${accessToken}`}})}

@@ -34,9 +34,11 @@ test('Vercel logout revokes the upstream Supabase session and clears the cookie'
     await logoutHandler(req, res);
     assert.equal(res.statusCode, 200);
     assert.match(res.headers['set-cookie'], /Max-Age=0/);
-    assert.equal(calls.length, 1);
-    assert.match(calls[0].url, /\/auth\/v1\/logout$/);
-    assert.equal(calls[0].options.headers.Authorization, 'Bearer access-token-a');
+    assert.equal(calls.length, 2);
+    assert.match(calls[0].url, /\/rest\/v1\/astracore_revoked_sessions$/);
+    assert.equal(calls[0].options.method, 'POST');
+    assert.match(calls[1].url, /\/auth\/v1\/logout$/);
+    assert.equal(calls[1].options.headers.Authorization, 'Bearer access-token-a');
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -58,18 +60,19 @@ test('logout refreshes an expired access token before revoking the session', asy
         user: { id: 'user-a', email: 'a@example.test', user_metadata: {}, app_metadata: { provider: 'password' } },
       }), { status: 200 });
     }
+    if (String(url).endsWith('/rest/v1/astracore_revoked_sessions') && options.method === 'POST') return new Response(null, { status: 201 });
     if (String(url).endsWith('/auth/v1/logout') && options.headers?.Authorization === 'Bearer fresh-access') {
       return new Response(null, { status: 204 });
     }
     throw new Error('Unexpected auth request');
   };
   try {
-    const token = auth.createSessionToken('expired-access', 'refresh-token-a', { id: 'user-a', email: 'a@example.test' });
+    const token = auth.createSessionToken('expired-access', 'refresh-token-a', { id: 'user-a', email: 'a@example.test' }, -120);
     const req = { method: 'POST', headers: { cookie: 'astracore_session=' + encodeURIComponent(token) } };
     const res = responseCapture();
     await logoutHandler(req, res);
     assert.equal(res.statusCode, 200);
-    assert.deepEqual(calls.map((call) => call.url.split('/').pop()), ['logout', 'token?grant_type=refresh_token', 'logout']);
+    assert.deepEqual(calls.map((call) => call.url.split('/').pop()), ['token?grant_type=refresh_token', 'astracore_revoked_sessions', 'logout']);
     assert.equal(calls[2].options.headers.Authorization, 'Bearer fresh-access');
   } finally {
     globalThis.fetch = originalFetch;
@@ -81,6 +84,7 @@ test('auth/me persists the rotated cookie after refreshing an expired access tok
   const calls = [];
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url: String(url), options });
+    if (String(url).includes('/rest/v1/astracore_revoked_sessions')) return new Response(JSON.stringify([]), { status: 200 });
     if (String(url).endsWith('/auth/v1/user')) {
       return new Response(JSON.stringify({ message: 'JWT expired' }), { status: 401 });
     }
@@ -95,7 +99,7 @@ test('auth/me persists the rotated cookie after refreshing an expired access tok
     throw new Error('Unexpected auth request');
   };
   try {
-    const token = auth.createSessionToken('expired-access', 'old-refresh', { id: 'user-a', email: 'a@example.test' });
+    const token = auth.createSessionToken('expired-access', 'old-refresh', { id: 'user-a', email: 'a@example.test' }, -120);
     const req = { method: 'GET', headers: { cookie: 'astracore_session=' + encodeURIComponent(token) } };
     const res = responseCapture();
     await meHandler(req, res);
