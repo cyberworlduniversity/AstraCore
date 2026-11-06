@@ -104,6 +104,7 @@ function safeAuditEvent(event) {
 export async function executeToolWithPolicy(tool, input, request = {}) {
   const requestId = String(request.requestId || randomUUID()).slice(0, 128);
   const principalId = String(request.userId || request.principalId || '').slice(0, 128);
+  if (!principalId) fail('Authenticated principal ID is required for tool execution', 401, 'PRINCIPAL_REQUIRED');
   if (typeof request.audit !== 'function') fail('A trusted audit writer is required before tool execution', 503, 'AUDIT_UNAVAILABLE');
   if (typeof tool?.execute !== 'function') fail('Tool adapter is not implemented', 501, 'TOOL_NOT_IMPLEMENTED');
   const authorization = authorizeTool(tool, {
@@ -136,8 +137,8 @@ export async function executeToolWithPolicy(tool, input, request = {}) {
     })));
     const timeout = new Promise((_, reject) => {
       timer = setTimeout(() => {
-        controller.abort(new Error('Tool execution deadline exceeded'));
         reject(Object.assign(new Error('Tool execution timed out'), { status: 504, code: 'TOOL_TIMEOUT' }));
+        controller.abort(new Error('Tool execution deadline exceeded'));
       }, timeoutMs);
       timer.unref?.();
     });
