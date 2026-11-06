@@ -84,7 +84,7 @@ test('sandbox uses fixed gVisor, no-network, no-mount, read-only resource-limite
 
 test('sandbox clamps timeout and kills an over-time worker', async () => {
   let childRef;
-  const fake = fakeSpawn({ closeDelay: 100 });
+  const fake = fakeSpawn({ closeDelay: 500 });
   const spawnProcess = (...args) => {
     childRef = fake.spawnProcess(...args);
     return childRef;
