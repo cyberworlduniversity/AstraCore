@@ -63,6 +63,7 @@ def generate(model, tokenizer, prompt, max_new_tokens):
     if len(prompt_ids) >= model.context_length:
         raise ValueError('prompt exceeds model context window')
     generated = []
+    stopped_on_eos = False
     model.eval()
     with torch.inference_mode():
         for _ in range(max_new_tokens):
@@ -72,9 +73,10 @@ def generate(model, tokenizer, prompt, max_new_tokens):
             if next_id < 0 or next_id >= tokenizer.vocab_size:
                 raise ValueError('model generated an out-of-range token ID')
             if next_id == tokenizer.eos_id:
+                stopped_on_eos = True
                 break
             generated.append(next_id)
-    return tokenizer.decode(generated), generated
+    return tokenizer.decode(generated), generated, stopped_on_eos
 
 
 def evaluate_checkpoint(checkpoint_dir, benchmark_path, max_new_tokens=32):
@@ -105,7 +107,7 @@ def evaluate_checkpoint(checkpoint_dir, benchmark_path, max_new_tokens=32):
     results = []
     categories = defaultdict(list)
     for row in rows:
-        prediction, generated_ids = generate(model, tokenizer, row['prompt'], max_new_tokens)
+        prediction, generated_ids, stopped_on_eos = generate(model, tokenizer, row['prompt'], max_new_tokens)
         reference = row['expected_answer']
         normalized_prediction = ' '.join(tokenizer.tokens(prediction))
         normalized_reference = ' '.join(tokenizer.tokens(reference))
@@ -120,7 +122,7 @@ def evaluate_checkpoint(checkpoint_dir, benchmark_path, max_new_tokens=32):
             'exact_match': exact,
             'token_f1': score,
             'generated_token_count': len(generated_ids),
-            'stopped_on_eos': len(generated_ids) < max_new_tokens,
+            'stopped_on_eos': stopped_on_eos,
         }
         results.append(result)
         categories[row['category']].append(result)
