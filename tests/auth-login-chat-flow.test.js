@@ -51,13 +51,17 @@ test('login -> auth/me -> protected chat workspace API -> logout -> protected AP
     }
     if (target.includes('/rest/v1/astracore_revoked_sessions')) {
       if (options.method === 'POST') {
-        const row = JSON.parse(options.body);
-        assert.equal(row.user_id, 'auth-user-a');
-        revokedSessionHashes.add(row.session_hash);
+        const rows = JSON.parse(options.body);
+        assert.equal(rows.length, 2);
+        for (const row of rows) {
+          assert.equal(row.user_id, 'auth-user-a');
+          revokedSessionHashes.add(row.session_hash);
+        }
         return new Response(null, { status: 201 });
       }
-      const hash = new URL(target).searchParams.get('session_hash')?.replace(/^eq\./, '');
-      return new Response(JSON.stringify(revokedSessionHashes.has(hash) ? [{ session_hash: hash }] : []), { status: 200 });
+      const hashes = new URL(target).searchParams.get('session_hash')?.match(/[a-f0-9]{64}/g) || [];
+      const matches = hashes.filter((hash) => revokedSessionHashes.has(hash)).map((session_hash) => ({ session_hash }));
+      return new Response(JSON.stringify(matches), { status: 200 });
     }
     if (target.endsWith('/auth/v1/user')) {
       assert.equal(options.headers.Authorization, 'Bearer access-token-a');
