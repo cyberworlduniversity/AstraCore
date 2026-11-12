@@ -7,9 +7,10 @@ always falls back to raw UTF-8 bytes.
 """
 from __future__ import annotations
 
+import hashlib
+import heapq
 import json
 import math
-from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Iterable
 
@@ -21,6 +22,8 @@ class AASTATokenizer:
     # Capping distinct contexts per side bounds per-candidate memory while
     # retaining enough diversity signal for ranking.
     MAX_CONTEXTS_PER_SIDE = 32
+    MAX_CANDIDATE_MULTIPLIER = 16
+    MIN_CANDIDATE_CAP = 4096
 
     def __init__(self, tokens: list[dict], *, context_weight: float = 0.25):
         self.context_weight = float(context_weight)
@@ -63,14 +66,13 @@ class AASTATokenizer:
               context_weight: float = 0.25) -> "AASTATokenizer":
         cls._validate_parameters(vocab_size, min_frequency,
                                  max_token_bytes, context_weight)
-        counts: Counter[bytes] = Counter()
-        left_contexts: dict[bytes, set[str]] = defaultdict(set)
-        right_contexts: dict[bytes, set[str]] = defaultdict(set)
+        candidate_cap = max(cls.MIN_CANDIDATE_CAP, (vocab_size - 256) * cls.MAX_CANDIDATE_MULTIPLIER)
+        stats: dict[bytes, list] = {}
+        candidate_heap: list[tuple[int, bytes]] = []
 
         for text in texts:
             if not isinstance(text, str):
                 raise TypeError("Training input must contain strings")
-            # Work on Unicode code points, never on partial UTF-8 sequences.
             chars = list(text)
             for start in range(len(chars)):
                 previous = chars[start - 1] if start else "^"
@@ -82,20 +84,31 @@ class AASTATokenizer:
                     if end == start:
                         continue
                     token = bytes(encoded)
+                    entry = stats.get(token)
+                    if entry is None:
+                        priority = int.from_bytes(hashlib.blake2b(token, digest_size=8).digest(), "big")
+                        if len(stats) >= candidate_cap:
+                            largest_priority = -candidate_heap[0][0]
+                            if priority >= largest_priority:
+                                continue
+                            _, evicted = heapq.heapreplace(candidate_heap, (-priority, token))
+                            del stats[evicted]
+                        else:
+                            heapq.heappush(candidate_heap, (-priority, token))
+                        entry = [0, set(), set()]
+                        stats[token] = entry
+                    entry[0] += 1
                     following = chars[end + 1] if end + 1 < len(chars) else "$"
-                    counts[token] += 1
-                    left = left_contexts[token]
-                    if len(left) < cls.MAX_CONTEXTS_PER_SIDE:
-                        left.add(previous)
-                    right = right_contexts[token]
-                    if len(right) < cls.MAX_CONTEXTS_PER_SIDE:
-                        right.add(following)
+                    if len(entry[1]) < cls.MAX_CONTEXTS_PER_SIDE:
+                        entry[1].add(previous)
+                    if len(entry[2]) < cls.MAX_CONTEXTS_PER_SIDE:
+                        entry[2].add(following)
 
         ranked: list[tuple[float, bytes, int, int]] = []
-        for token, frequency in counts.items():
+        for token, (frequency, left, right) in stats.items():
             if frequency < min_frequency:
                 continue
-            diversity = len(left_contexts[token]) + len(right_contexts[token])
+            diversity = len(left) + len(right)
             length = len(token)
             # Reward repeated byte savings and use-context diversity to avoid
             # selecting only a single repeated phrase from one narrow context.
