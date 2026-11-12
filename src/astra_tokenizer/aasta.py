@@ -7,9 +7,10 @@ always falls back to raw UTF-8 bytes.
 """
 from __future__ import annotations
 
+import heapq
 import json
 import math
-from collections import Counter, defaultdict
+import unicodedata
 from pathlib import Path
 from typing import Iterable
 
@@ -17,6 +18,12 @@ from typing import Iterable
 class AASTATokenizer:
     FORMAT_VERSION = 1
     ALGORITHM = "AASTA"
+    # Context diversity is a scoring feature, not an unbounded corpus archive.
+    # Capping distinct contexts per side bounds per-candidate memory while
+    # retaining enough diversity signal for ranking.
+    MAX_CONTEXTS_PER_SIDE = 32
+    MAX_CANDIDATE_MULTIPLIER = 16
+    MIN_CANDIDATE_CAP = 4096
 
     def __init__(self, tokens: list[dict], *, context_weight: float = 0.25):
         self.context_weight = float(context_weight)
@@ -59,14 +66,27 @@ class AASTATokenizer:
               context_weight: float = 0.25) -> "AASTATokenizer":
         cls._validate_parameters(vocab_size, min_frequency,
                                  max_token_bytes, context_weight)
-        counts: Counter[bytes] = Counter()
-        left_contexts: dict[bytes, set[str]] = defaultdict(set)
-        right_contexts: dict[bytes, set[str]] = defaultdict(set)
+        candidate_cap = max(cls.MIN_CANDIDATE_CAP, (vocab_size - 256) * cls.MAX_CANDIDATE_MULTIPLIER)
+        # Space-Saving candidate tracking replaces the previous hash-based
+        # reservoir. Hash sampling can discard a genuinely frequent Tamil
+        # substring simply because its digest sorts poorly. Space-Saving keeps
+        # candidates with high observed frequency while bounding memory.
+        stats: dict[bytes, list] = {}
+        candidate_heap: list[tuple[int, int, bytes]] = []
+        # Monotonic versions prevent stale heap records from an evicted token
+        # matching a later re-insertion of the same byte sequence.
+        heap_version = 0
+
+        def refresh_heap() -> None:
+            nonlocal candidate_heap
+            candidate_heap = [
+                (entry[0], entry[4], token) for token, entry in stats.items()
+            ]
+            heapq.heapify(candidate_heap)
 
         for text in texts:
             if not isinstance(text, str):
                 raise TypeError("Training input must contain strings")
-            # Work on Unicode code points, never on partial UTF-8 sequences.
             chars = list(text)
             for start in range(len(chars)):
                 previous = chars[start - 1] if start else "^"
@@ -75,34 +95,161 @@ class AASTATokenizer:
                     encoded.extend(chars[end].encode("utf-8"))
                     if len(encoded) > max_token_bytes:
                         break
-                    if end == start:
+                    # A single multibyte code point (for example, a
+                    # Tamil letter) is itself a useful token: the byte
+                    # fallback would otherwise emit 2-4 tokens for it.
+                    # Keep single-byte ASCII characters in the byte fallback.
+                    if end == start and len(encoded) == 1:
                         continue
                     token = bytes(encoded)
+                    entry = stats.get(token)
+                    is_new_candidate = entry is None
+                    if entry is None:
+                        if len(stats) >= candidate_cap:
+                            while candidate_heap:
+                                min_count, min_version, evicted = heapq.heappop(candidate_heap)
+                                current = stats.get(evicted)
+                                if current is None:
+                                    continue
+                                if current[0] != min_count or current[4] != min_version:
+                                    # Refresh a stale minimum lazily. Existing
+                                    # candidates do not need a heap push for
+                                    # every occurrence, which keeps training
+                                    # efficient on large corpora.
+                                    heapq.heappush(
+                                        candidate_heap,
+                                        (current[0], current[4], evicted),
+                                    )
+                                    continue
+                                break
+                            else:
+                                raise RuntimeError("AASTA candidate tracker lost heap state")
+                            del stats[evicted]
+                            estimated_count = min_count + 1
+                            entry = [estimated_count, set(), set(), min_count, 0]
+                        else:
+                            entry = [1, set(), set(), 0, 0]
+                        stats[token] = entry
+                    else:
+                        entry[0] += 1
+                    heap_version += 1
+                    entry[4] = heap_version
+                    # The heap keeps at most one live record per candidate;
+                    # stale records are refreshed only when they reach the minimum.
+                    if is_new_candidate:
+                        heapq.heappush(candidate_heap, (entry[0], entry[4], token))
+                    if len(candidate_heap) > candidate_cap * 2:
+                        refresh_heap()
                     following = chars[end + 1] if end + 1 < len(chars) else "$"
-                    counts[token] += 1
-                    left_contexts[token].add(previous)
-                    right_contexts[token].add(following)
+                    if len(entry[1]) < cls.MAX_CONTEXTS_PER_SIDE:
+                        entry[1].add(previous)
+                    if len(entry[2]) < cls.MAX_CONTEXTS_PER_SIDE:
+                        entry[2].add(following)
 
-        ranked: list[tuple[float, bytes, int, int]] = []
-        for token, frequency in counts.items():
+        ranked_by_bucket: dict[str, list[tuple[float, bytes, int, int]]] = {
+            "tamil": [], "latin": [], "mixed": [], "other": []
+        }
+        tamil_single_ranked: list[tuple[float, bytes, int, int]] = []
+        for token, (frequency, left, right, _error, _version) in stats.items():
             if frequency < min_frequency:
                 continue
-            diversity = len(left_contexts[token]) + len(right_contexts[token])
+            diversity = len(left) + len(right)
             length = len(token)
             # Reward repeated byte savings and use-context diversity to avoid
             # selecting only a single repeated phrase from one narrow context.
+            left_boundary = any(not char.isalnum() for char in left)
+            right_boundary = any(not char.isalnum() for char in right)
+            boundary_factor = 1.0 + 0.35 * (
+                int(left_boundary) + int(right_boundary)
+            )
             score = (math.log1p(frequency) * (length - 1)
-                     * (1.0 + context_weight * math.log1p(diversity)))
-            ranked.append((score, token, frequency, diversity))
+                     * (1.0 + context_weight * math.log1p(diversity))
+                     * boundary_factor)
+            item = (score, token, frequency, diversity)
 
-        ranked.sort(key=lambda item: (-item[0], item[1]))
-        selected = ranked[:vocab_size - 256]
+            # Classify candidates by the scripts they actually contain. This
+            # prevents a high-volume script from consuming the entire shared
+            # vocabulary and starving another language of reusable spans.
+            decoded = token.decode("utf-8")
+            tamil_letters = latin_letters = 0
+            for char in decoded:
+                if not char.isalpha():
+                    continue
+                name = unicodedata.name(char, "")
+                if "TAMIL" in name:
+                    tamil_letters += 1
+                elif "LATIN" in name:
+                    latin_letters += 1
+            if tamil_letters and latin_letters:
+                bucket = "mixed"
+            elif tamil_letters:
+                bucket = "tamil"
+            elif latin_letters:
+                bucket = "latin"
+            else:
+                bucket = "other"
+            ranked_by_bucket[bucket].append(item)
+            if len(decoded) == 1 and tamil_letters:
+                tamil_single_ranked.append(item)
+
+        rank_key = lambda item: (-item[0], item[1])
+        for pool in ranked_by_bucket.values():
+            pool.sort(key=rank_key)
+        tamil_single_ranked.sort(key=rank_key)
+
+        learned_budget = vocab_size - 256
+        # Allocate a predictable floor across scripts: 35% Tamil, 45% Latin,
+        # 10% mixed-script and 10% other. Within the Tamil share, reserve up
+        # to 20% of the total learned budget for frequent Tamil code points.
+        # Any unused quota is returned to a global score-ranked backfill.
+        tamil_quota = round(learned_budget * 0.35)
+        latin_quota = round(learned_budget * 0.45)
+        mixed_quota = round(learned_budget * 0.10)
+        other_quota = learned_budget - tamil_quota - latin_quota - mixed_quota
+        tamil_single_quota = min(
+            len(tamil_single_ranked), round(learned_budget * 0.25)
+        )
+        selected = list(tamil_single_ranked[:tamil_single_quota])
+        selected_keys = {item[1] for item in selected}
+
+        def take(pool: list[tuple[float, bytes, int, int]], quota: int) -> None:
+            for item in pool:
+                if len(selected) >= learned_budget:
+                    break
+                if quota <= 0:
+                    break
+                if item[1] in selected_keys:
+                    continue
+                selected.append(item)
+                selected_keys.add(item[1])
+                quota -= 1
+
+        take(ranked_by_bucket["tamil"], tamil_quota - tamil_single_quota)
+        take(ranked_by_bucket["latin"], latin_quota)
+        take(ranked_by_bucket["mixed"], mixed_quota)
+        take(ranked_by_bucket["other"], other_quota)
+
+        if len(selected) < learned_budget:
+            all_ranked = sorted(
+                (item for pool in ranked_by_bucket.values() for item in pool),
+                key=rank_key,
+            )
+            for item in all_ranked:
+                if item[1] not in selected_keys:
+                    selected.append(item)
+                    selected_keys.add(item[1])
+                    if len(selected) >= learned_budget:
+                        break
+        selected.sort(key=rank_key)
         records = [
             {"hex": token.hex(), "frequency": frequency,
              "context_diversity": diversity, "score": score}
             for score, token, frequency, diversity in selected
         ]
-        return cls(records, context_weight=context_weight)
+        tokenizer = cls(records, context_weight=context_weight)
+        tokenizer.training_candidate_count = len(stats)
+        tokenizer.training_candidate_cap = candidate_cap
+        return tokenizer
 
     def encode(self, text: str) -> list[int]:
         if not isinstance(text, str):
@@ -186,7 +333,7 @@ class AASTATokenizer:
             "base_vocab_size": 256,
             "vocab_size": self.vocab_size,
             "context_weight": self.context_weight,
-            "selection": "frequency_x_byte_savings_x_context_diversity",
+            "selection": "space_saving_script_balanced_frequency_byte_savings_context_diversity_boundary",
             "tokens": [
                 {"hex": raw.hex(), "frequency": self.frequencies[i],
                  "context_diversity": self.context_diversities[i]}
