@@ -14,8 +14,8 @@ AASTA is a tokenizer, not a complete language model and not a semantic reasoning
 
 AASTA uses two distinct stages:
 
-1. **Context-diverse vocabulary learning.** Enumerate Unicode-code-point-aligned spans up to a configurable UTF-8 byte length. Count each span and record the number of distinct left and right neighboring code points observed in the corpus.
-2. **Optimal reversible segmentation.** At inference, use dynamic programming over the UTF-8 byte sequence. Learned tokens may begin and end only at Unicode code-point boundaries. Every byte remains available as a fallback token, guaranteeing that unseen strings can still be encoded.
+1. **Context-diverse vocabulary learning.** Enumerate Unicode-code-point-aligned spans up to a configurable UTF-8 byte length, including single multibyte code points such as Tamil letters (single-byte ASCII characters remain in the byte fallback). Count each span and record the number of distinct left and right neighboring code points observed in the corpus.
+2. **Optimal reversible segmentation.** At inference, use dynamic programming over the UTF-8 byte sequence. Learned tokens may begin and end only at Unicode code-point boundaries; a single multibyte code point is eligible as a learned token. Every byte remains available as a fallback token, guaranteeing that unseen strings can still be encoded.
 
 This is not pair-merging BPE. The vocabulary is selected directly from candidate spans using a corpus score, then inference selects a segmentation by dynamic programming.
 
