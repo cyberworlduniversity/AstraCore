@@ -134,8 +134,8 @@ class AASTATokenizer:
                         entry[0] += 1
                     heap_version += 1
                     entry[4] = heap_version
-                    # Lazy heap updates are compacted periodically so the
-                    # heap remains O(candidate_cap), not O(corpus occurrences).
+                    # The heap keeps at most one live record per candidate;
+                    # stale records are refreshed only when they reach the minimum.
                     if is_new_candidate:
                         heapq.heappush(candidate_heap, (entry[0], entry[4], token))
                     if len(candidate_heap) > candidate_cap * 2:
