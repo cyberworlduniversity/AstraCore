@@ -37,8 +37,9 @@ class AASTATests(unittest.TestCase):
         self.assertEqual(tokenizer.decode(encoded), "க")
 
     def test_vocabulary_reserves_slots_for_multibyte_codepoints(self):
+        tamil_characters = "அஆஇஈஉஊஎஏஐஒஓஔகஙசஞடணதநபமயரலவழளறன"
         corpus = [
-            "தமிழ் மொழி கல்வி அறிவியல் கணினி பாதுகாப்பு " * 5,
+            tamil_characters * 8,
             "Long English phrases should not consume every learned token slot " * 5,
         ] * 20
         tokenizer = AASTATokenizer.train(
