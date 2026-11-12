@@ -148,7 +148,7 @@ class AASTATests(unittest.TestCase):
             "alpha beta gamma delta epsilon",
         ] * 8
         with patch.object(AASTATokenizer, "MIN_CANDIDATE_CAP", 3), patch.object(
-            AASTATokenizer, "MAX_CANDIDATE_MULTIPLIER", 1
+            AASTATokenizer, "MAX_CANDIDATE_MULTIPLIER", 0
         ):
             first = AASTATokenizer.train(
                 corpus, vocab_size=260, min_frequency=1, max_token_bytes=8
@@ -157,6 +157,7 @@ class AASTATests(unittest.TestCase):
                 corpus, vocab_size=260, min_frequency=1, max_token_bytes=8
             )
         self.assertEqual(first.to_dict(), second.to_dict())
+        self.assertEqual(first.training_candidate_cap, 3)
         self.assertLessEqual(first.training_candidate_count, 3)
         sample = "தமிழ் alpha"
         self.assertEqual(first.decode(first.encode(sample)), sample)
