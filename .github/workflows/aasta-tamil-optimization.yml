@@ -1,5 +1,5 @@
 name: AASTA Tamil optimization verification
-# Benchmark validation includes the tuned multilingual vocabulary budget.
+# Benchmark validation includes the tuned multilingual vocabulary budget and expanded Tamil character coverage.
 
 on:
   push:
