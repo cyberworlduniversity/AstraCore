@@ -7,7 +7,6 @@ always falls back to raw UTF-8 bytes.
 """
 from __future__ import annotations
 
-import hashlib
 import heapq
 import json
 import math
