@@ -1,36 +1,34 @@
-# AstraCore — ASTRA-LM 0.1
+# ASTRA CORE AI
 
-A from-scratch Tamil + English language-model research project.
+Research project for building an independently implemented Tamil + English AI system, beginning with its tokenizer and training foundations.
 
-## Stage 1: tokenizer
+## Current component: AASTA
 
-This repository begins with a small, dependency-free byte-level BPE tokenizer written in Python. It is designed to preserve arbitrary UTF-8 text, including Tamil Unicode text, without requiring a pretrained tokenizer or external AI service.
+**ASTRA Adaptive Semantic Tokenization Algorithm (AASTA)** is the project's experimental Unicode-aware tokenizer. It is separate from the initial byte-level BPE baseline.
+
+AASTA learns candidate text spans using corpus frequency, byte savings, and left/right context diversity. At inference it uses dynamic programming to choose a reversible segmentation. Literal UTF-8 byte tokens provide fallback for unseen text, so Tamil, English, mixed scripts, and emoji remain lossless.
 
 ### Requirements
 - Python 3.10+
-- No third-party package required for the tokenizer or its tests
+- No third-party runtime dependency
 
 ### Run tests
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-### Train a tokenizer
-Prepare a UTF-8 text corpus, one or more text files:
+### Train AASTA
 ```bash
-python -m astra_tokenizer.cli train --input data/sample.txt --output artifacts/astra-bpe.json --vocab-size 512
+PYTHONPATH=src python -m astra_tokenizer.aasta_cli train --input data/corpus.txt --output artifacts/aasta.json --vocab-size 2048
 ```
 
 ### Encode / decode
 ```bash
-python -m astra_tokenizer.cli encode --tokenizer artifacts/astra-bpe.json --text "வணக்கம் Astra"
-python -m astra_tokenizer.cli decode --tokenizer artifacts/astra-bpe.json --ids "..."
+PYTHONPATH=src python -m astra_tokenizer.aasta_cli encode --tokenizer artifacts/aasta.json --text "வணக்கம் ASTRA CORE AI"
+PYTHONPATH=src python -m astra_tokenizer.aasta_cli decode --tokenizer artifacts/aasta.json --ids "..."
 ```
 
-The tokenizer is an initial research component, not a trained language model. A tokenizer test passing does not imply that ASTRA-LM can already generate useful answers. Training data, model architecture, training, evaluation, and Android inference are later stages.
+See [AASTA specification](docs/AASTA_SPEC.md) for its scoring equation, segmentation rule, invariants, complexity, limitations, and benchmark plan.
 
-## Project principles
-- Train model weights from random initialization; do not use pretrained language-model weights.
-- Do not require third-party AI APIs for core inference.
-- Keep Tamil and English text round-trippable.
-- Measure quality and resource use before increasing model size.
+## Research honesty
+AASTA is an experimental tokenizer, not a complete AI model. It does not itself provide reasoning or semantic understanding. Its current implementation has correctness tests but has not yet been benchmarked as better than BPE, Unigram, or commercial tokenizers. The repository retains the BPE implementation as a baseline for comparison.
