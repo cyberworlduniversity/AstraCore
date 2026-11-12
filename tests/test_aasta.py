@@ -106,6 +106,37 @@ class AASTATests(unittest.TestCase):
         unknown = "புதிய சொல் 🛰️"
         self.assertEqual(trained.decode(trained.encode(unknown)), unknown)
 
+
+    def test_vocabulary_balances_tamil_and_latin_spans(self):
+        tamil = "தமிழ் மொழி அறிவியல் கணினி பாதுகாப்பு"
+        english = "cyber security research computer science language model"
+        corpus = [tamil] * 80 + [english] * 80
+        tokenizer = AASTATokenizer.train(
+            corpus, vocab_size=320, min_frequency=2, max_token_bytes=20
+        )
+        latin_tokens = [
+            token for token in tokenizer.tokens
+            if token.decode("utf-8").isascii()
+            and any(char.isalpha() for char in token.decode("utf-8"))
+        ]
+        tamil_tokens = [
+            token for token in tokenizer.tokens
+            if any("TAMIL" in __import__("unicodedata").name(char, "")
+                   for char in token.decode("utf-8"))
+        ]
+        self.assertGreater(len(latin_tokens), 0)
+        self.assertGreater(len(tamil_tokens), 0)
+        english_sample = "cyber security computer science"
+        tamil_sample = "தமிழ் மொழி அறிவியல்"
+        self.assertLess(
+            len(tokenizer.encode(english_sample)),
+            len(english_sample.encode("utf-8")),
+        )
+        self.assertLess(
+            len(tokenizer.encode(tamil_sample)),
+            len(tamil_sample.encode("utf-8")),
+        )
+
     def test_save_load(self):
         corpus = ["தமிழ் AI தமிழ்", "English AI English"] * 3
         tokenizer = AASTATokenizer.train(corpus, vocab_size=360)
