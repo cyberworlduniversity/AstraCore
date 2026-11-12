@@ -125,7 +125,8 @@ class AASTATokenizer:
                     if len(entry[2]) < cls.MAX_CONTEXTS_PER_SIDE:
                         entry[2].add(following)
 
-        ranked: list[tuple[float, bytes, int, int]] = []
+        single_codepoint_ranked: list[tuple[float, bytes, int, int]] = []
+        span_ranked: list[tuple[float, bytes, int, int]] = []
         for token, (frequency, left, right, _error) in stats.items():
             if frequency < min_frequency:
                 continue
@@ -135,10 +136,30 @@ class AASTATokenizer:
             # selecting only a single repeated phrase from one narrow context.
             score = (math.log1p(frequency) * (length - 1)
                      * (1.0 + context_weight * math.log1p(diversity)))
-            ranked.append((score, token, frequency, diversity))
+            item = (score, token, frequency, diversity)
+            if len(token.decode("utf-8")) == 1:
+                single_codepoint_ranked.append(item)
+            else:
+                span_ranked.append(item)
 
-        ranked.sort(key=lambda item: (-item[0], item[1]))
-        selected = ranked[:vocab_size - 256]
+        rank_key = lambda item: (-item[0], item[1])
+        single_codepoint_ranked.sort(key=rank_key)
+        span_ranked.sort(key=rank_key)
+        learned_budget = vocab_size - 256
+        # Reserve half of learned slots for frequent multibyte code points.
+        # Without this script-aware floor, long ASCII spans can monopolize the
+        # vocabulary and Tamil letters fall back to three separate byte IDs.
+        single_quota = min(len(single_codepoint_ranked), learned_budget // 2)
+        selected = (
+            single_codepoint_ranked[:single_quota]
+            + span_ranked[:learned_budget - single_quota]
+        )
+        if len(selected) < learned_budget:
+            selected.extend(
+                single_codepoint_ranked[single_quota:
+                                        single_quota + learned_budget - len(selected)]
+            )
+        selected.sort(key=rank_key)
         records = [
             {"hex": token.hex(), "frequency": frequency,
              "context_diversity": diversity, "score": score}
