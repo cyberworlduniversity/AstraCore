@@ -27,6 +27,15 @@ class AASTATests(unittest.TestCase):
         index = tokenizer.tokens.index(b"ab")
         self.assertLessEqual(tokenizer.context_diversities[index], 64)
 
+    def test_multibyte_tamil_codepoint_is_a_single_learned_token(self):
+        tokenizer = AASTATokenizer.train(
+            ["க"] * 20, vocab_size=300, min_frequency=2, max_token_bytes=8
+        )
+        encoded = tokenizer.encode("க")
+        self.assertEqual(len(encoded), 1)
+        self.assertGreaterEqual(encoded[0], 256)
+        self.assertEqual(tokenizer.decode(encoded), "க")
+
     def test_frequent_tamil_span_survives_candidate_pressure(self):
         corpus = ["தமிழ் அறிவியல் தமிழ் மொழி " * 4 for _ in range(80)]
         corpus.extend(f"unique-noise-{i:06d}-xyz" for i in range(1800))
