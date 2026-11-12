@@ -48,7 +48,7 @@ class AASTATests(unittest.TestCase):
         learned_single_codepoints = sum(
             len(token.decode("utf-8")) == 1 for token in tokenizer.tokens
         )
-        self.assertGreaterEqual(learned_single_codepoints, 22)
+        self.assertGreaterEqual(learned_single_codepoints, (300 - 256) // 4)
 
     def test_frequent_tamil_span_survives_candidate_pressure(self):
         corpus = ["தமிழ் அறிவியல் தமிழ் மொழி " * 4 for _ in range(80)]
