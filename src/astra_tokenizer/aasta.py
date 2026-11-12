@@ -134,8 +134,18 @@ class AASTATokenizer:
             length = len(token)
             # Reward repeated byte savings and use-context diversity to avoid
             # selecting only a single repeated phrase from one narrow context.
+            left_boundary = any(
+                not char.isalnum() for char in left
+            )
+            right_boundary = any(
+                not char.isalnum() for char in right
+            )
+            boundary_factor = 1.0 + 0.35 * (
+                int(left_boundary) + int(right_boundary)
+            )
             score = (math.log1p(frequency) * (length - 1)
-                     * (1.0 + context_weight * math.log1p(diversity)))
+                     * (1.0 + context_weight * math.log1p(diversity))
+                     * boundary_factor)
             item = (score, token, frequency, diversity)
             if len(token.decode("utf-8")) == 1:
                 single_codepoint_ranked.append(item)
