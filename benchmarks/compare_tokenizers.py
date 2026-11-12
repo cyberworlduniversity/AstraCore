@@ -74,6 +74,9 @@ def main():
         language_samples["ta"] = read_lines(args.eval_tamil_file)
     if args.eval_english_file:
         language_samples["en"] = read_lines(args.eval_english_file)
+    for language, texts in language_samples.items():
+        if not texts:
+            raise SystemExit(f"The {language} evaluation file must contain non-empty lines")
     if args.eval_file:
         samples = read_lines(args.eval_file)
     else:
@@ -116,7 +119,15 @@ def main():
         "eval_sha256": hashlib.sha256(eval_bytes).hexdigest(),
         "training_lines": len(train_texts), "evaluation_lines": len(samples),
         "vocab_budget": args.vocab_size, "repeats": args.repeats,
-        "language_evaluation_files": {"ta": args.eval_tamil_file, "en": args.eval_english_file},
+        "language_evaluation_files": {
+            language: {
+                "path": path,
+                "lines": len(language_samples.get(language, [])),
+                "sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest()
+            }
+            for language, path in (("ta", args.eval_tamil_file), ("en", args.eval_english_file))
+            if path
+        },
         "results": results, "repeated_results": repeated_results, "summary": summary,
         "notes": [
             "Exact round-trip is required before metrics are reported.",
