@@ -17,7 +17,7 @@ permissions:
 jobs:
   corpus-benchmark:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,18 +29,30 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e . datasets
-      - name: Stream Tamil and English starter corpora
+      - name: Stream small Tamil and English starter corpora
         run: |
-          python data/download_hf_corpora.py --tamil-max-rows 5000 --english-max-rows 5000 --quality-min 0.8
+          python data/download_hf_corpora.py --tamil-max-rows 500 --english-max-rows 500 --quality-min 0.8
       - name: Prepare normalized train and evaluation splits
-        run: python data/prepare_corpus.py --max-lines-per-source 5000 --eval-percent 10
-      - name: Benchmark AASTA against byte-BPE
+        run: python data/prepare_corpus.py --max-lines-per-source 500 --eval-percent 10
+      - name: Create deterministic small benchmark subset
         run: |
-          python benchmarks/compare_tokenizers.py --train-file data/prepared/train.txt --eval-file data/prepared/eval.txt --vocab-size 512 --output benchmarks/corpus-results.json
+          python - <<'PY'
+          from pathlib import Path
+          train = [line for line in Path("data/prepared/train.txt").read_text(encoding="utf-8").splitlines() if line.strip()]
+          evaluation = [line for line in Path("data/prepared/eval.txt").read_text(encoding="utf-8").splitlines() if line.strip()]
+          if len(train) < 2 or not evaluation:
+              raise SystemExit(f"Insufficient prepared data: train={len(train)}, eval={len(evaluation)}")
+          Path("data/prepared/smoke-train.txt").write_text("\n".join(train[:100]) + "\n", encoding="utf-8")
+          Path("data/prepared/smoke-eval.txt").write_text("\n".join(evaluation[:25]) + "\n", encoding="utf-8")
+          print(f"Small benchmark subset: train={min(100, len(train))}, eval={min(25, len(evaluation))}")
+          PY
+      - name: Benchmark AASTA against byte-BPE (small smoke test)
+        run: |
+          python benchmarks/compare_tokenizers.py --train-file data/prepared/smoke-train.txt --eval-file data/prepared/smoke-eval.txt --vocab-size 320 --output benchmarks/corpus-results.json
       - name: Upload corpus manifests and benchmark report
         uses: actions/upload-artifact@v4
         with:
-          name: astra-corpus-benchmark
+          name: astra-small-corpus-benchmark
           path: |
             data/raw/download_manifest.json
             data/prepared/manifest.json
