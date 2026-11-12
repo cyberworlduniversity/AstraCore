@@ -67,8 +67,17 @@ class AASTATokenizer:
         cls._validate_parameters(vocab_size, min_frequency,
                                  max_token_bytes, context_weight)
         candidate_cap = max(cls.MIN_CANDIDATE_CAP, (vocab_size - 256) * cls.MAX_CANDIDATE_MULTIPLIER)
+        # Space-Saving candidate tracking replaces the previous hash-based
+        # reservoir. Hash sampling can discard a genuinely frequent Tamil
+        # substring simply because its digest sorts poorly. Space-Saving keeps
+        # candidates with high observed frequency while bounding memory.
         stats: dict[bytes, list] = {}
         candidate_heap: list[tuple[int, bytes]] = []
+
+        def refresh_heap() -> None:
+            nonlocal candidate_heap
+            candidate_heap = [(entry[0], token) for token, entry in stats.items()]
+            heapq.heapify(candidate_heap)
 
         for text in texts:
             if not isinstance(text, str):
@@ -86,18 +95,27 @@ class AASTATokenizer:
                     token = bytes(encoded)
                     entry = stats.get(token)
                     if entry is None:
-                        priority = int.from_bytes(hashlib.blake2b(token, digest_size=8).digest(), "big")
                         if len(stats) >= candidate_cap:
-                            largest_priority = -candidate_heap[0][0]
-                            if priority >= largest_priority:
-                                continue
-                            _, evicted = heapq.heapreplace(candidate_heap, (-priority, token))
+                            while candidate_heap:
+                                min_count, evicted = heapq.heappop(candidate_heap)
+                                current = stats.get(evicted)
+                                if current is not None and current[0] == min_count:
+                                    break
+                            else:
+                                raise RuntimeError("AASTA candidate tracker lost heap state")
                             del stats[evicted]
+                            estimated_count = min_count + 1
+                            entry = [estimated_count, set(), set(), min_count]
                         else:
-                            heapq.heappush(candidate_heap, (-priority, token))
-                        entry = [0, set(), set()]
+                            entry = [1, set(), set(), 0]
                         stats[token] = entry
-                    entry[0] += 1
+                    else:
+                        entry[0] += 1
+                    # Lazy heap updates are compacted periodically so the
+                    # heap remains O(candidate_cap), not O(corpus occurrences).
+                    heapq.heappush(candidate_heap, (entry[0], token))
+                    if len(candidate_heap) > candidate_cap * 2:
+                        refresh_heap()
                     following = chars[end + 1] if end + 1 < len(chars) else "$"
                     if len(entry[1]) < cls.MAX_CONTEXTS_PER_SIDE:
                         entry[1].add(previous)
@@ -105,7 +123,7 @@ class AASTATokenizer:
                         entry[2].add(following)
 
         ranked: list[tuple[float, bytes, int, int]] = []
-        for token, (frequency, left, right) in stats.items():
+        for token, (frequency, left, right, _error) in stats.items():
             if frequency < min_frequency:
                 continue
             diversity = len(left) + len(right)
