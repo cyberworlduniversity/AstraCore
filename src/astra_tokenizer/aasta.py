@@ -194,7 +194,7 @@ class AASTATokenizer:
 
         def take(pool: list[tuple[float, bytes, int, int]], quota: int) -> None:
             for item in pool:
-                if len([entry for entry in selected if entry[1] in selected_keys]) >= learned_budget:
+                if len(selected) >= learned_budget:
                     break
                 if quota <= 0:
                     break
