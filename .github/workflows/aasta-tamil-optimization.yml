@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - optimization/aasta-memory-v2-2026-11-12
+      - optimization/aasta-balanced-vocab-2026-11-12
     paths:
       - "src/astra_tokenizer/aasta.py"
       - "tests/test_aasta.py"
