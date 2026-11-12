@@ -42,10 +42,10 @@ jobs:
       - name: Upload corpus manifests and benchmark report
         uses: actions/upload-artifact@v4
         with:
-          name: astra-small-corpus-benchmark
+          name: astra-expanded-corpus-benchmark
           path: |
             data/raw/download_manifest.json
             data/prepared/manifest.json
-            benchmarks/corpus-results.json
+            benchmarks/expanded-corpus-results.json
           if-no-files-found: error
           retention-days: 30
