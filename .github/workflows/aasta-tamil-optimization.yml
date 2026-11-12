@@ -1,0 +1,46 @@
+name: AASTA Tamil optimization verification
+# Benchmark validation includes multilingual vocabulary reservation, word-boundary scoring, and expanded Tamil character coverage.
+
+on:
+  push:
+    branches:
+      - optimization/aasta-memory-v2-2026-11-12
+    paths:
+      - "src/astra_tokenizer/aasta.py"
+      - "tests/test_aasta.py"
+      - "scripts/benchmark_aasta_tamil.py"
+      - ".github/workflows/aasta-tamil-optimization.yml"
+  pull_request:
+    paths:
+      - "src/astra_tokenizer/aasta.py"
+      - "tests/test_aasta.py"
+      - "scripts/benchmark_aasta_tamil.py"
+      - ".github/workflows/aasta-tamil-optimization.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install project
+        run: python -m pip install -e .
+      - name: Run full unit test suite
+        run: python -m unittest discover -s tests -v
+      - name: Run three-repeat Tamil and English benchmark
+        run: python scripts/benchmark_aasta_tamil.py
+      - name: Upload benchmark report
+        uses: actions/upload-artifact@v4
+        with:
+          name: aasta-tamil-optimization-report
+          path: benchmark-results/aasta-tamil-optimization.json
+          if-no-files-found: error
+          retention-days: 30

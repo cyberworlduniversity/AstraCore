@@ -7,9 +7,9 @@ always falls back to raw UTF-8 bytes.
 """
 from __future__ import annotations
 
+import heapq
 import json
 import math
-from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Iterable
 
@@ -17,6 +17,12 @@ from typing import Iterable
 class AASTATokenizer:
     FORMAT_VERSION = 1
     ALGORITHM = "AASTA"
+    # Context diversity is a scoring feature, not an unbounded corpus archive.
+    # Capping distinct contexts per side bounds per-candidate memory while
+    # retaining enough diversity signal for ranking.
+    MAX_CONTEXTS_PER_SIDE = 32
+    MAX_CANDIDATE_MULTIPLIER = 16
+    MIN_CANDIDATE_CAP = 4096
 
     def __init__(self, tokens: list[dict], *, context_weight: float = 0.25):
         self.context_weight = float(context_weight)
@@ -59,14 +65,22 @@ class AASTATokenizer:
               context_weight: float = 0.25) -> "AASTATokenizer":
         cls._validate_parameters(vocab_size, min_frequency,
                                  max_token_bytes, context_weight)
-        counts: Counter[bytes] = Counter()
-        left_contexts: dict[bytes, set[str]] = defaultdict(set)
-        right_contexts: dict[bytes, set[str]] = defaultdict(set)
+        candidate_cap = max(cls.MIN_CANDIDATE_CAP, (vocab_size - 256) * cls.MAX_CANDIDATE_MULTIPLIER)
+        # Space-Saving candidate tracking replaces the previous hash-based
+        # reservoir. Hash sampling can discard a genuinely frequent Tamil
+        # substring simply because its digest sorts poorly. Space-Saving keeps
+        # candidates with high observed frequency while bounding memory.
+        stats: dict[bytes, list] = {}
+        candidate_heap: list[tuple[int, bytes]] = []
+
+        def refresh_heap() -> None:
+            nonlocal candidate_heap
+            candidate_heap = [(entry[0], token) for token, entry in stats.items()]
+            heapq.heapify(candidate_heap)
 
         for text in texts:
             if not isinstance(text, str):
                 raise TypeError("Training input must contain strings")
-            # Work on Unicode code points, never on partial UTF-8 sequences.
             chars = list(text)
             for start in range(len(chars)):
                 previous = chars[start - 1] if start else "^"
@@ -75,34 +89,96 @@ class AASTATokenizer:
                     encoded.extend(chars[end].encode("utf-8"))
                     if len(encoded) > max_token_bytes:
                         break
-                    if end == start:
+                    # A single multibyte code point (for example, a
+                    # Tamil letter) is itself a useful token: the byte
+                    # fallback would otherwise emit 2-4 tokens for it.
+                    # Keep single-byte ASCII characters in the byte fallback.
+                    if end == start and len(encoded) == 1:
                         continue
                     token = bytes(encoded)
+                    entry = stats.get(token)
+                    if entry is None:
+                        if len(stats) >= candidate_cap:
+                            while candidate_heap:
+                                min_count, evicted = heapq.heappop(candidate_heap)
+                                current = stats.get(evicted)
+                                if current is not None and current[0] == min_count:
+                                    break
+                            else:
+                                raise RuntimeError("AASTA candidate tracker lost heap state")
+                            del stats[evicted]
+                            estimated_count = min_count + 1
+                            entry = [estimated_count, set(), set(), min_count]
+                        else:
+                            entry = [1, set(), set(), 0]
+                        stats[token] = entry
+                    else:
+                        entry[0] += 1
+                    # Lazy heap updates are compacted periodically so the
+                    # heap remains O(candidate_cap), not O(corpus occurrences).
+                    heapq.heappush(candidate_heap, (entry[0], token))
+                    if len(candidate_heap) > candidate_cap * 2:
+                        refresh_heap()
                     following = chars[end + 1] if end + 1 < len(chars) else "$"
-                    counts[token] += 1
-                    left_contexts[token].add(previous)
-                    right_contexts[token].add(following)
+                    if len(entry[1]) < cls.MAX_CONTEXTS_PER_SIDE:
+                        entry[1].add(previous)
+                    if len(entry[2]) < cls.MAX_CONTEXTS_PER_SIDE:
+                        entry[2].add(following)
 
-        ranked: list[tuple[float, bytes, int, int]] = []
-        for token, frequency in counts.items():
+        single_codepoint_ranked: list[tuple[float, bytes, int, int]] = []
+        span_ranked: list[tuple[float, bytes, int, int]] = []
+        for token, (frequency, left, right, _error) in stats.items():
             if frequency < min_frequency:
                 continue
-            diversity = len(left_contexts[token]) + len(right_contexts[token])
+            diversity = len(left) + len(right)
             length = len(token)
             # Reward repeated byte savings and use-context diversity to avoid
             # selecting only a single repeated phrase from one narrow context.
+            left_boundary = any(
+                not char.isalnum() for char in left
+            )
+            right_boundary = any(
+                not char.isalnum() for char in right
+            )
+            boundary_factor = 1.0 + 0.35 * (
+                int(left_boundary) + int(right_boundary)
+            )
             score = (math.log1p(frequency) * (length - 1)
-                     * (1.0 + context_weight * math.log1p(diversity)))
-            ranked.append((score, token, frequency, diversity))
+                     * (1.0 + context_weight * math.log1p(diversity))
+                     * boundary_factor)
+            item = (score, token, frequency, diversity)
+            if len(token.decode("utf-8")) == 1:
+                single_codepoint_ranked.append(item)
+            else:
+                span_ranked.append(item)
 
-        ranked.sort(key=lambda item: (-item[0], item[1]))
-        selected = ranked[:vocab_size - 256]
+        rank_key = lambda item: (-item[0], item[1])
+        single_codepoint_ranked.sort(key=rank_key)
+        span_ranked.sort(key=rank_key)
+        learned_budget = vocab_size - 256
+        # Reserve half of learned slots for frequent multibyte code points.
+        # Without this script-aware floor, long ASCII spans can monopolize the
+        # vocabulary and Tamil letters fall back to three separate byte IDs.
+        single_quota = min(len(single_codepoint_ranked), learned_budget // 4)
+        selected = (
+            single_codepoint_ranked[:single_quota]
+            + span_ranked[:learned_budget - single_quota]
+        )
+        if len(selected) < learned_budget:
+            selected.extend(
+                single_codepoint_ranked[single_quota:
+                                        single_quota + learned_budget - len(selected)]
+            )
+        selected.sort(key=rank_key)
         records = [
             {"hex": token.hex(), "frequency": frequency,
              "context_diversity": diversity, "score": score}
             for score, token, frequency, diversity in selected
         ]
-        return cls(records, context_weight=context_weight)
+        tokenizer = cls(records, context_weight=context_weight)
+        tokenizer.training_candidate_count = len(stats)
+        tokenizer.training_candidate_cap = candidate_cap
+        return tokenizer
 
     def encode(self, text: str) -> list[int]:
         if not isinstance(text, str):
