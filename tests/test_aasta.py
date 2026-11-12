@@ -41,6 +41,22 @@ class AASTATests(unittest.TestCase):
                 (320 - 256) * AASTATokenizer.MAX_CANDIDATE_MULTIPLIER),
         )
 
+    def test_unicode_edge_cases_round_trip_without_normalization(self):
+        samples = [
+            "கொங்கு தமிழ் — வணக்கம்",
+            "தமிழ்\u0bcd + combining marks",
+            "e\u0301 and é must remain distinct",
+            "👩‍💻 🏳️‍🌈 🇮🇳",
+            "English 123 !?.,;:()[]{}",
+            "தமிழ்-English_混合",
+        ]
+        tokenizer = AASTATokenizer.train(
+            samples * 2, vocab_size=420, min_frequency=2, max_token_bytes=20
+        )
+        for sample in samples:
+            self.assertEqual(tokenizer.decode(tokenizer.encode(sample)), sample)
+        self.assertEqual(tokenizer.encode(""), [])
+
     def test_unknown_text_uses_byte_fallback(self):
         trained = AASTATokenizer.train(["hello hello"], vocab_size=300)
         unknown = "புதிய சொல் 🛰️"
