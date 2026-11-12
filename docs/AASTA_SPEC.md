@@ -27,10 +27,13 @@ For candidate span t:
 - L(t): UTF-8 byte length
 - D(t): number of distinct left contexts plus distinct right contexts
 - alpha: configurable context weight (default 0.25)
+- B(t): boundary factor, equal to 1 + 0.35 for each side where at least one observed neighboring code point is non-alphanumeric (maximum 1.7)
 
 The selection score is:
 
 **S(t) = ln(1 + f(t)) × (L(t) − 1) × [1 + alpha × ln(1 + D(t))] × B(t)**
+
+The boundary factor is a corpus-context preference, not a token boundary restriction. It rewards spans observed next to whitespace or punctuation.
 
 Candidates below min_frequency are discarded. Candidate collection is bounded by a Space-Saving frequency tracker: when the table is full, the least-frequent tracked candidate is replaced and the incoming candidate receives the evicted minimum count as an error bound. This deliberately favors repeatedly observed spans over arbitrary hash-selected spans. Context sets remain capped per side. Remaining tracked candidates are sorted by descending S(t), with raw UTF-8 bytes as a deterministic tie-breaker. To prevent one script from monopolizing a multilingual vocabulary, candidates are classified as Tamil, Latin, mixed-script, or other. The default allocation targets 35% Tamil, 45% Latin, 10% mixed-script, and 10% other candidates. Within the Tamil allocation, up to 25% of the total learned-token budget is first reserved for frequent single Tamil code points. Unused per-script quotas are returned through a global score-ranked backfill. These are allocation targets, not guarantees that every corpus will contain enough eligible candidates. The top vocab_size − 256 candidates are retained. Because Space-Saving estimates counts after replacement, benchmark reports must include corpus-specific token counts rather than treating the score as an exact global frequency.
 
