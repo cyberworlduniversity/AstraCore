@@ -18,6 +18,15 @@ class AASTATests(unittest.TestCase):
         for sample in samples:
             self.assertEqual(tokenizer.decode(tokenizer.encode(sample)), sample)
 
+    def test_context_diversity_is_memory_bounded(self):
+        samples = [chr(0x1000 + i) + "ab" + chr(0x2000 + i)
+                   for i in range(80)]
+        tokenizer = AASTATokenizer.train(
+            samples, vocab_size=257, min_frequency=2, max_token_bytes=2
+        )
+        index = tokenizer.tokens.index(b"ab")
+        self.assertLessEqual(tokenizer.context_diversities[index], 64)
+
     def test_unknown_text_uses_byte_fallback(self):
         trained = AASTATokenizer.train(["hello hello"], vocab_size=300)
         unknown = "புதிய சொல் 🛰️"
