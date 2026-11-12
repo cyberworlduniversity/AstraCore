@@ -9,6 +9,14 @@ on:
       - 'src/**'
       - 'pyproject.toml'
       - 'tests/**'
+  pull_request:
+    paths:
+      - '.github/workflows/corpus-benchmark.yml'
+      - 'data/**'
+      - 'benchmarks/**'
+      - 'src/**'
+      - 'pyproject.toml'
+      - 'tests/**'
   workflow_dispatch:
 
 permissions:
