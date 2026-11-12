@@ -10,6 +10,7 @@ from __future__ import annotations
 import heapq
 import json
 import math
+import unicodedata
 from pathlib import Path
 from typing import Iterable
 
@@ -125,8 +126,10 @@ class AASTATokenizer:
                     if len(entry[2]) < cls.MAX_CONTEXTS_PER_SIDE:
                         entry[2].add(following)
 
-        single_codepoint_ranked: list[tuple[float, bytes, int, int]] = []
-        span_ranked: list[tuple[float, bytes, int, int]] = []
+        ranked_by_bucket: dict[str, list[tuple[float, bytes, int, int]]] = {
+            "tamil": [], "latin": [], "mixed": [], "other": []
+        }
+        tamil_single_ranked: list[tuple[float, bytes, int, int]] = []
         for token, (frequency, left, right, _error) in stats.items():
             if frequency < min_frequency:
                 continue
@@ -134,12 +137,8 @@ class AASTATokenizer:
             length = len(token)
             # Reward repeated byte savings and use-context diversity to avoid
             # selecting only a single repeated phrase from one narrow context.
-            left_boundary = any(
-                not char.isalnum() for char in left
-            )
-            right_boundary = any(
-                not char.isalnum() for char in right
-            )
+            left_boundary = any(not char.isalnum() for char in left)
+            right_boundary = any(not char.isalnum() for char in right)
             boundary_factor = 1.0 + 0.35 * (
                 int(left_boundary) + int(right_boundary)
             )
@@ -147,28 +146,80 @@ class AASTATokenizer:
                      * (1.0 + context_weight * math.log1p(diversity))
                      * boundary_factor)
             item = (score, token, frequency, diversity)
-            if len(token.decode("utf-8")) == 1:
-                single_codepoint_ranked.append(item)
+
+            # Classify candidates by the scripts they actually contain. This
+            # prevents a high-volume script from consuming the entire shared
+            # vocabulary and starving another language of reusable spans.
+            decoded = token.decode("utf-8")
+            tamil_letters = latin_letters = 0
+            for char in decoded:
+                if not char.isalpha():
+                    continue
+                name = unicodedata.name(char, "")
+                if "TAMIL" in name:
+                    tamil_letters += 1
+                elif "LATIN" in name:
+                    latin_letters += 1
+            if tamil_letters and latin_letters:
+                bucket = "mixed"
+            elif tamil_letters:
+                bucket = "tamil"
+            elif latin_letters:
+                bucket = "latin"
             else:
-                span_ranked.append(item)
+                bucket = "other"
+            ranked_by_bucket[bucket].append(item)
+            if len(decoded) == 1 and tamil_letters:
+                tamil_single_ranked.append(item)
 
         rank_key = lambda item: (-item[0], item[1])
-        single_codepoint_ranked.sort(key=rank_key)
-        span_ranked.sort(key=rank_key)
+        for pool in ranked_by_bucket.values():
+            pool.sort(key=rank_key)
+        tamil_single_ranked.sort(key=rank_key)
+
         learned_budget = vocab_size - 256
-        # Reserve half of learned slots for frequent multibyte code points.
-        # Without this script-aware floor, long ASCII spans can monopolize the
-        # vocabulary and Tamil letters fall back to three separate byte IDs.
-        single_quota = min(len(single_codepoint_ranked), learned_budget // 4)
-        selected = (
-            single_codepoint_ranked[:single_quota]
-            + span_ranked[:learned_budget - single_quota]
+        # Allocate a predictable floor across scripts: 35% Tamil, 45% Latin,
+        # 10% mixed-script and 10% other. Within the Tamil share, reserve up
+        # to 20% of the total learned budget for frequent Tamil code points.
+        # Any unused quota is returned to a global score-ranked backfill.
+        tamil_quota = round(learned_budget * 0.35)
+        latin_quota = round(learned_budget * 0.45)
+        mixed_quota = round(learned_budget * 0.10)
+        other_quota = learned_budget - tamil_quota - latin_quota - mixed_quota
+        tamil_single_quota = min(
+            len(tamil_single_ranked), round(learned_budget * 0.20)
         )
+        selected = list(tamil_single_ranked[:tamil_single_quota])
+        selected_keys = {item[1] for item in selected}
+
+        def take(pool: list[tuple[float, bytes, int, int]], quota: int) -> None:
+            for item in pool:
+                if len([entry for entry in selected if entry[1] in selected_keys]) >= learned_budget:
+                    break
+                if quota <= 0:
+                    break
+                if item[1] in selected_keys:
+                    continue
+                selected.append(item)
+                selected_keys.add(item[1])
+                quota -= 1
+
+        take(ranked_by_bucket["tamil"], tamil_quota - tamil_single_quota)
+        take(ranked_by_bucket["latin"], latin_quota)
+        take(ranked_by_bucket["mixed"], mixed_quota)
+        take(ranked_by_bucket["other"], other_quota)
+
         if len(selected) < learned_budget:
-            selected.extend(
-                single_codepoint_ranked[single_quota:
-                                        single_quota + learned_budget - len(selected)]
+            all_ranked = sorted(
+                (item for pool in ranked_by_bucket.values() for item in pool),
+                key=rank_key,
             )
+            for item in all_ranked:
+                if item[1] not in selected_keys:
+                    selected.append(item)
+                    selected_keys.add(item[1])
+                    if len(selected) >= learned_budget:
+                        break
         selected.sort(key=rank_key)
         records = [
             {"hex": token.hex(), "frequency": frequency,
