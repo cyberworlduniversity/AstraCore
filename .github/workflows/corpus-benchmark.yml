@@ -48,7 +48,7 @@ jobs:
           PY
       - name: Benchmark AASTA against byte-BPE (small smoke test)
         run: |
-          python benchmarks/compare_tokenizers.py --train-file data/prepared/smoke-train.txt --eval-file data/prepared/smoke-eval.txt --vocab-size 320 --output benchmarks/corpus-results.json
+          python benchmarks/compare_tokenizers.py --train-file data/prepared/smoke-train.txt --eval-file data/prepared/smoke-eval.txt --vocab-size 320 --repeats 5 --output benchmarks/corpus-results.json
       - name: Upload corpus manifests and benchmark report
         uses: actions/upload-artifact@v4
         with:
