@@ -72,7 +72,7 @@ class AASTATokenizer:
         # substring simply because its digest sorts poorly. Space-Saving keeps
         # candidates with high observed frequency while bounding memory.
         stats: dict[bytes, list] = {}
-        candidate_heap: list[tuple[int, bytes]] = []
+        candidate_heap: list[tuple[int, int, bytes]] = []
 
         def refresh_heap() -> None:
             nonlocal candidate_heap
@@ -318,7 +318,7 @@ class AASTATokenizer:
             "base_vocab_size": 256,
             "vocab_size": self.vocab_size,
             "context_weight": self.context_weight,
-            "selection": "frequency_x_byte_savings_x_context_diversity",
+            "selection": "space_saving_script_balanced_frequency_byte_savings_context_diversity_boundary",
             "tokens": [
                 {"hex": raw.hex(), "frequency": self.frequencies[i],
                  "context_diversity": self.context_diversities[i]}
