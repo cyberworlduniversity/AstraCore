@@ -27,14 +27,22 @@ TRAIN = [
     "A tokenizer converts text into token IDs and reconstructs the exact text.",
 ] * 12
 
-EVAL = [
-    "தமிழ் மொழி மற்றும் கணினி அறிவியல்",
-    "ASTRA CORE AI — தமிழ் English mixed test.",
-    "இணைய பாதுகாப்பு மாணவர்களுக்கு மிகவும் அவசியம்.",
-    "Unicode எழுத்துகள் 😀 மற்றும் emoji round-trip சோதனை.",
-    "Cybersecurity education should be accessible to everyone.",
-    "தமிழ் சொற்களின் token சுருக்கத் திறனை அளவிடுகிறோம்.",
-] * 4
+EVAL_GROUPS = {
+    "tamil": [
+        "தமிழ் மொழி மற்றும் கணினி அறிவியல்",
+        "இணைய பாதுகாப்பு மாணவர்களுக்கு மிகவும் அவசியம்.",
+        "தமிழ் சொற்களின் token சுருக்கத் திறனை அளவிடுகிறோம்.",
+    ] * 4,
+    "english": [
+        "Cybersecurity education should be accessible to everyone.",
+        "A tokenizer converts text into tokens and reconstructs the original text.",
+    ] * 4,
+    "mixed": [
+        "ASTRA CORE AI — தமிழ் English mixed test.",
+        "Unicode எழுத்துகள் 😀 மற்றும் emoji round-trip சோதனை.",
+    ] * 4,
+}
+EVAL = [sample for group in EVAL_GROUPS.values() for sample in group]
 
 
 class ByteBPE:
@@ -114,7 +122,23 @@ def run_once() -> dict:
         bpe.decode(tokens) == text for tokens, text in zip(bpe_encoded, EVAL)
     )
 
+    per_language = {}
+    for language, samples in EVAL_GROUPS.items():
+        aasta_group = [aasta.encode(text) for text in samples]
+        bpe_group = [bpe.encode(text) for text in samples]
+        per_language[language] = {
+            "aasta_token_count": sum(map(len, aasta_group)),
+            "byte_bpe_token_count": sum(map(len, bpe_group)),
+            "aasta_round_trip": all(
+                aasta.decode(ids) == text for ids, text in zip(aasta_group, samples)
+            ),
+            "byte_bpe_round_trip": all(
+                bpe.decode(tokens) == text for tokens, text in zip(bpe_group, samples)
+            ),
+        }
+
     return {
+        "per_language": per_language,
         "aasta": {
             "train_seconds": round(aasta_train, 6),
             "encode_seconds": round(aasta_encode, 6),
@@ -142,6 +166,16 @@ def main() -> None:
         "train_samples": len(TRAIN),
         "evaluation_samples": len(EVAL),
         "runs": runs,
+        "per_language_summary": {
+            language: {
+                key: sum(run["per_language"][language][key] for run in runs)
+                for key in (
+                    "aasta_token_count", "byte_bpe_token_count",
+                    "aasta_round_trip", "byte_bpe_round_trip",
+                )
+            }
+            for language in EVAL_GROUPS
+        },
         "summary": {},
     }
     for model in ("aasta", "byte_bpe"):
