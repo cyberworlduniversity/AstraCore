@@ -32,7 +32,7 @@ The selection score is:
 
 **S(t) = ln(1 + f(t)) × (L(t) − 1) × [1 + alpha × ln(1 + D(t))]**
 
-Candidates below min_frequency are discarded. Remaining candidates are sorted by descending S(t), with raw UTF-8 bytes as a deterministic tie-breaker. The top vocab_size − 256 candidates are retained.
+Candidates below min_frequency are discarded. Candidate collection is bounded by a Space-Saving frequency tracker: when the table is full, the least-frequent tracked candidate is replaced and the incoming candidate receives the evicted minimum count as an error bound. This deliberately favors repeatedly observed spans over arbitrary hash-selected spans. Context sets remain capped per side. Remaining tracked candidates are sorted by descending S(t), with raw UTF-8 bytes as a deterministic tie-breaker. The top vocab_size − 256 candidates are retained. Because Space-Saving estimates counts after replacement, benchmark reports must include corpus-specific token counts rather than treating the score as an exact global frequency.
 
 Interpretation: frequent spans that save more bytes and appear across varied contexts are favored. This is a statistical selection heuristic; it does not prove that a span has semantic meaning.
 
@@ -66,7 +66,7 @@ Let N be the number of Unicode code points in the training corpus, M the configu
 - Encoding uses trie traversal and dynamic programming; practical work depends on the maximum token length and matches at each position. Memory is O(T).
 - Decoding is O(total decoded bytes).
 
-Large-corpus streaming, bounded candidate tables, grapheme-cluster-aware boundaries, and optimized native/mobile implementations are future engineering work.
+Candidate-table memory is bounded by a configurable vocabulary-derived cap, with a lazy min-heap periodically compacted to remain proportional to that cap. Large-corpus streaming, grapheme-cluster-aware boundaries, and optimized native/mobile implementations remain future engineering work.
 
 ## 7. Current limitations
 
