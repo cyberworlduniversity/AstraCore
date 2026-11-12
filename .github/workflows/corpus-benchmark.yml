@@ -1,0 +1,49 @@
+name: ASTRA corpus download and benchmark
+
+on:
+  push:
+    paths:
+      - '.github/workflows/corpus-benchmark.yml'
+      - 'data/**'
+      - 'benchmarks/**'
+      - 'src/**'
+      - 'pyproject.toml'
+      - 'tests/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  corpus-benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install project and dataset reader
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . datasets
+      - name: Stream Tamil and English starter corpora
+        run: |
+          python data/download_hf_corpora.py --tamil-max-rows 5000 --english-max-rows 5000 --quality-min 0.8
+      - name: Prepare normalized train and evaluation splits
+        run: python data/prepare_corpus.py --max-lines-per-source 5000 --eval-percent 10
+      - name: Benchmark AASTA against byte-BPE
+        run: |
+          python benchmarks/compare_tokenizers.py --train-file data/prepared/train.txt --eval-file data/prepared/eval.txt --vocab-size 512 --output benchmarks/corpus-results.json
+      - name: Upload corpus manifests and benchmark report
+        uses: actions/upload-artifact@v4
+        with:
+          name: astra-corpus-benchmark
+          path: |
+            data/raw/download_manifest.json
+            data/prepared/manifest.json
+            benchmarks/corpus-results.json
+          if-no-files-found: error
+          retention-days: 30
