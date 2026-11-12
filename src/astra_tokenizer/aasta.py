@@ -135,7 +135,7 @@ class AASTATokenizer:
             "tamil": [], "latin": [], "mixed": [], "other": []
         }
         tamil_single_ranked: list[tuple[float, bytes, int, int]] = []
-        for token, (frequency, left, right, _error) in stats.items():
+        for token, (frequency, left, right, _error, _version) in stats.items():
             if frequency < min_frequency:
                 continue
             diversity = len(left) + len(right)
