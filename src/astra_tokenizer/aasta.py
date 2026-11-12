@@ -149,7 +149,7 @@ class AASTATokenizer:
         # Reserve half of learned slots for frequent multibyte code points.
         # Without this script-aware floor, long ASCII spans can monopolize the
         # vocabulary and Tamil letters fall back to three separate byte IDs.
-        single_quota = min(len(single_codepoint_ranked), learned_budget // 2)
+        single_quota = min(len(single_codepoint_ranked), learned_budget // 4)
         selected = (
             single_codepoint_ranked[:single_quota]
             + span_ranked[:learned_budget - single_quota]
