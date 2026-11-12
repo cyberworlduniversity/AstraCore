@@ -187,7 +187,7 @@ class AASTATokenizer:
         mixed_quota = round(learned_budget * 0.10)
         other_quota = learned_budget - tamil_quota - latin_quota - mixed_quota
         tamil_single_quota = min(
-            len(tamil_single_ranked), round(learned_budget * 0.20)
+            len(tamil_single_ranked), round(learned_budget * 0.25)
         )
         selected = list(tamil_single_ranked[:tamil_single_quota])
         selected_keys = {item[1] for item in selected}
