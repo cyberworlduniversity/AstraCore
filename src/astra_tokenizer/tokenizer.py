@@ -144,9 +144,9 @@ class ByteBPETokenizer:
         if data.get("algorithm") != "byte-level-bpe":
             raise ValueError("Unsupported tokenizer algorithm")
         merges = [tuple(map(int, pair)) for pair in data["merges"]]
-        for pair in merges:
-            if len(pair) != 2 or any(value < 0 or value >= 256 + merges.index(pair)
-                                     for value in pair):
+        for rank, pair in enumerate(merges):
+            limit = 256 + rank
+            if len(pair) != 2 or any(value < 0 or value >= limit for value in pair):
                 # Merge references may point only to base or earlier tokens.
                 raise ValueError("Invalid merge reference")
         return cls(merges)
