@@ -27,6 +27,20 @@ class AASTATests(unittest.TestCase):
         index = tokenizer.tokens.index(b"ab")
         self.assertLessEqual(tokenizer.context_diversities[index], 64)
 
+    def test_candidate_statistics_have_a_hard_memory_cap(self):
+        samples = [f"unique-{i:05d}-தமிழ்-context-{i:05d}" for i in range(1200)]
+        tokenizer = AASTATokenizer.train(
+            samples, vocab_size=320, min_frequency=1, max_token_bytes=16
+        )
+        self.assertLessEqual(
+            tokenizer.training_candidate_count, tokenizer.training_candidate_cap
+        )
+        self.assertEqual(
+            tokenizer.training_candidate_cap,
+            max(AASTATokenizer.MIN_CANDIDATE_CAP,
+                (320 - 256) * AASTATokenizer.MAX_CANDIDATE_MULTIPLIER),
+        )
+
     def test_unknown_text_uses_byte_fallback(self):
         trained = AASTATokenizer.train(["hello hello"], vocab_size=300)
         unknown = "புதிய சொல் 🛰️"
