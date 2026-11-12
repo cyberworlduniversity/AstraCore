@@ -1,8 +1,8 @@
 import tempfile
 import unittest
 import unicodedata
-from pathlib
-from unittest.mock import patch import Path
+from pathlib import Path
+from unittest.mock import patch
 
 from astra_tokenizer.aasta import AASTATokenizer
 
