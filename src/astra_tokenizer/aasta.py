@@ -89,7 +89,11 @@ class AASTATokenizer:
                     encoded.extend(chars[end].encode("utf-8"))
                     if len(encoded) > max_token_bytes:
                         break
-                    if end == start:
+                    # A single multibyte code point (for example, a
+                    # Tamil letter) is itself a useful token: the byte
+                    # fallback would otherwise emit 2-4 tokens for it.
+                    # Keep single-byte ASCII characters in the byte fallback.
+                    if end == start and len(encoded) == 1:
                         continue
                     token = bytes(encoded)
                     entry = stats.get(token)
