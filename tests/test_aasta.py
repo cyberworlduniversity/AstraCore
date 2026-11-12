@@ -27,6 +27,27 @@ class AASTATests(unittest.TestCase):
         index = tokenizer.tokens.index(b"ab")
         self.assertLessEqual(tokenizer.context_diversities[index], 64)
 
+    def test_frequent_tamil_span_survives_candidate_pressure(self):
+        corpus = ["தமிழ் அறிவியல் தமிழ் மொழி " * 4 for _ in range(80)]
+        corpus.extend(f"unique-noise-{i:06d}-xyz" for i in range(1800))
+        tokenizer = AASTATokenizer.train(
+            corpus, vocab_size=420, min_frequency=2, max_token_bytes=16
+        )
+        self.assertIn("தமிழ்".encode("utf-8"), tokenizer.tokens)
+        sample = "தமிழ் அறிவியல்"
+        self.assertEqual(tokenizer.decode(tokenizer.encode(sample)), sample)
+
+    def test_space_saving_candidate_selection_is_deterministic(self):
+        corpus = ["தமிழ் தமிழ் English English"] * 20
+        corpus.extend(f"noise-{i:05d}" for i in range(1500))
+        first = AASTATokenizer.train(
+            corpus, vocab_size=380, min_frequency=2, max_token_bytes=12
+        )
+        second = AASTATokenizer.train(
+            corpus, vocab_size=380, min_frequency=2, max_token_bytes=12
+        )
+        self.assertEqual(first.to_dict(), second.to_dict())
+
     def test_candidate_statistics_have_a_hard_memory_cap(self):
         samples = [f"unique-{i:05d}-தமிழ்-context-{i:05d}" for i in range(1200)]
         tokenizer = AASTATokenizer.train(
