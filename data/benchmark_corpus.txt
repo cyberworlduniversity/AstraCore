@@ -1,0 +1,12 @@
+ASTRA CORE AI is an experimental Tamil and English language technology project.
+The tokenizer must preserve every original Unicode character during encoding and decoding.
+வணக்கம்! இது ASTRA CORE AI திட்டத்தின் தமிழ் சோதனைத் தொகுப்பு.
+தமிழ் மொழியின் எழுத்துகள், சொற்கள், வாக்கியங்கள் சரியாக encode decode ஆக வேண்டும்.
+Artificial intelligence systems can produce incorrect answers and should verify evidence.
+ஒரு நல்ல AI அமைப்பு தெரியாத தகவலைத் தெரியும் என்று கூறக்கூடாது.
+நாம் தமிழ் மற்றும் ஆங்கிலம் கலந்த உரையையும் சோதிக்கிறோம்: Tamil + English + AI.
+Unicode includes combining marks, emoji 😀, punctuation — and numbers 2026.
+மொழி மாதிரியின் தரம் தரவுத்தொகுப்பு, பயிற்சி முறை, மாதிரி அளவு ஆகியவற்றைப் பொறுத்தது.
+A tokenizer maps text into token IDs; it does not independently understand meaning.
+ASTRA CORE AI aims to support privacy, safety, reliable reasoning, and offline inference.
+சோதனையின் முடிவுகளை அளவிட வேண்டும்; ஆதாரமில்லாமல் சிறந்தது என்று கூறக்கூடாது.
