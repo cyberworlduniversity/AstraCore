@@ -103,15 +103,25 @@ class AASTATokenizer:
                         continue
                     token = bytes(encoded)
                     entry = stats.get(token)
+                    is_new_candidate = entry is None
                     if entry is None:
                         if len(stats) >= candidate_cap:
                             while candidate_heap:
                                 min_count, min_version, evicted = heapq.heappop(candidate_heap)
                                 current = stats.get(evicted)
-                                if (current is not None
-                                        and current[0] == min_count
-                                        and current[4] == min_version):
-                                    break
+                                if current is None:
+                                    continue
+                                if current[0] != min_count or current[4] != min_version:
+                                    # Refresh a stale minimum lazily. Existing
+                                    # candidates do not need a heap push for
+                                    # every occurrence, which keeps training
+                                    # efficient on large corpora.
+                                    heapq.heappush(
+                                        candidate_heap,
+                                        (current[0], current[4], evicted),
+                                    )
+                                    continue
+                                break
                             else:
                                 raise RuntimeError("AASTA candidate tracker lost heap state")
                             del stats[evicted]
@@ -126,7 +136,8 @@ class AASTATokenizer:
                     entry[4] = heap_version
                     # Lazy heap updates are compacted periodically so the
                     # heap remains O(candidate_cap), not O(corpus occurrences).
-                    heapq.heappush(candidate_heap, (entry[0], entry[4], token))
+                    if is_new_candidate:
+                        heapq.heappush(candidate_heap, (entry[0], entry[4], token))
                     if len(candidate_heap) > candidate_cap * 2:
                         refresh_heap()
                     following = chars[end + 1] if end + 1 < len(chars) else "$"
