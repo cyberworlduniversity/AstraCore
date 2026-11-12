@@ -73,6 +73,9 @@ class AASTATokenizer:
         # candidates with high observed frequency while bounding memory.
         stats: dict[bytes, list] = {}
         candidate_heap: list[tuple[int, int, bytes]] = []
+        # Monotonic versions prevent stale heap records from an evicted token
+        # matching a later re-insertion of the same byte sequence.
+        heap_version = 0
 
         def refresh_heap() -> None:
             nonlocal candidate_heap
@@ -119,7 +122,8 @@ class AASTATokenizer:
                         stats[token] = entry
                     else:
                         entry[0] += 1
-                    entry[4] += 1
+                    heap_version += 1
+                    entry[4] = heap_version
                     # Lazy heap updates are compacted periodically so the
                     # heap remains O(candidate_cap), not O(corpus occurrences).
                     heapq.heappush(candidate_heap, (entry[0], entry[4], token))
