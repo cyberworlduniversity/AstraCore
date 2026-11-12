@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import unicodedata
 from pathlib import Path
 
 from astra_tokenizer.aasta import AASTATokenizer
@@ -121,7 +122,7 @@ class AASTATests(unittest.TestCase):
         ]
         tamil_tokens = [
             token for token in tokenizer.tokens
-            if any("TAMIL" in __import__("unicodedata").name(char, "")
+            if any("TAMIL" in unicodedata.name(char, "")
                    for char in token.decode("utf-8"))
         ]
         self.assertGreater(len(latin_tokens), 0)
