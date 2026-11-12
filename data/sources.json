@@ -1,0 +1,4 @@
+[
+  {"path":"data/raw/tamil_indiccorp_v2.txt","name":"AI4Bharat IndicCorp v2 Tamil (tam_Taml)","url":"https://huggingface.co/datasets/ai4bharat/IndicCorpV2","license":"CC0-1.0","language":"ta"},
+  {"path":"data/raw/english_wikimedia.txt","name":"English Wikimedia project text dump","url":"https://dumps.wikimedia.org/enwiki/","license":"CC-BY-SA-4.0","language":"en"}
+]
