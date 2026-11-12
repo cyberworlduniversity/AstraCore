@@ -36,6 +36,19 @@ class AASTATests(unittest.TestCase):
         self.assertGreaterEqual(encoded[0], 256)
         self.assertEqual(tokenizer.decode(encoded), "க")
 
+    def test_vocabulary_reserves_slots_for_multibyte_codepoints(self):
+        corpus = [
+            "தமிழ் மொழி கல்வி அறிவியல் கணினி பாதுகாப்பு " * 5,
+            "Long English phrases should not consume every learned token slot " * 5,
+        ] * 20
+        tokenizer = AASTATokenizer.train(
+            corpus, vocab_size=300, min_frequency=2, max_token_bytes=24
+        )
+        learned_single_codepoints = sum(
+            len(token.decode("utf-8")) == 1 for token in tokenizer.tokens
+        )
+        self.assertGreaterEqual(learned_single_codepoints, 22)
+
     def test_frequent_tamil_span_survives_candidate_pressure(self):
         corpus = ["தமிழ் அறிவியல் தமிழ் மொழி " * 4 for _ in range(80)]
         corpus.extend(f"unique-noise-{i:06d}-xyz" for i in range(1800))
