@@ -1,6 +1,11 @@
 # Dataset area
 
-Place UTF-8 plain-text training corpus files here. Use text you own or have permission to use. Keep source, license, collection date, language, and preprocessing notes documented. Do not put private or personal data in the corpus.
+Raw corpora are not committed. See [SOURCES.md](SOURCES.md) for reviewed source choices, license notes, and preparation instructions.
 
-The tokenizer CLI accepts one or more files:
-`python -m astra_tokenizer.cli train --input data/corpus.txt --output artifacts/astra-bpe.json`
+Place UTF-8, one-record-per-line source files under `data/raw/` using the filenames in `sources.json`. Then run:
+
+```bash
+python data/prepare_corpus.py --max-lines-per-source 100000 --eval-percent 10
+```
+
+The script creates deterministic train/evaluation splits and a provenance manifest with source and output SHA-256 hashes. Raw and prepared text are ignored by Git.
