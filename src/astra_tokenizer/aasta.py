@@ -17,6 +17,10 @@ from typing import Iterable
 class AASTATokenizer:
     FORMAT_VERSION = 1
     ALGORITHM = "AASTA"
+    # Context diversity is a scoring feature, not an unbounded corpus archive.
+    # Capping distinct contexts per side bounds per-candidate memory while
+    # retaining enough diversity signal for ranking.
+    MAX_CONTEXTS_PER_SIDE = 32
 
     def __init__(self, tokens: list[dict], *, context_weight: float = 0.25):
         self.context_weight = float(context_weight)
@@ -80,8 +84,12 @@ class AASTATokenizer:
                     token = bytes(encoded)
                     following = chars[end + 1] if end + 1 < len(chars) else "$"
                     counts[token] += 1
-                    left_contexts[token].add(previous)
-                    right_contexts[token].add(following)
+                    left = left_contexts[token]
+                    if len(left) < cls.MAX_CONTEXTS_PER_SIDE:
+                        left.add(previous)
+                    right = right_contexts[token]
+                    if len(right) < cls.MAX_CONTEXTS_PER_SIDE:
+                        right.add(following)
 
         ranked: list[tuple[float, bytes, int, int]] = []
         for token, frequency in counts.items():
