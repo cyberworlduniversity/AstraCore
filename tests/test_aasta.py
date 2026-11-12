@@ -1,7 +1,8 @@
 import tempfile
 import unittest
 import unicodedata
-from pathlib import Path
+from pathlib
+from unittest.mock import patch import Path
 
 from astra_tokenizer.aasta import AASTATokenizer
 
@@ -137,6 +138,28 @@ class AASTATests(unittest.TestCase):
             len(tokenizer.encode(tamil_sample)),
             len(tamil_sample.encode("utf-8")),
         )
+
+
+    def test_space_saving_heap_ignores_stale_candidate_versions(self):
+        corpus = [
+            "தமிழ் தமிழ் தமிழ்",
+            "alpha beta gamma delta epsilon",
+            "தமிழ் தமிழ் தமிழ்",
+            "alpha beta gamma delta epsilon",
+        ] * 8
+        with patch.object(AASTATokenizer, "MIN_CANDIDATE_CAP", 3), patch.object(
+            AASTATokenizer, "MAX_CANDIDATE_MULTIPLIER", 1
+        ):
+            first = AASTATokenizer.train(
+                corpus, vocab_size=260, min_frequency=1, max_token_bytes=8
+            )
+            second = AASTATokenizer.train(
+                corpus, vocab_size=260, min_frequency=1, max_token_bytes=8
+            )
+        self.assertEqual(first.to_dict(), second.to_dict())
+        self.assertLessEqual(first.training_candidate_count, 3)
+        sample = "தமிழ் alpha"
+        self.assertEqual(first.decode(first.encode(sample)), sample)
 
     def test_save_load(self):
         corpus = ["தமிழ் AI தமிழ்", "English AI English"] * 3
