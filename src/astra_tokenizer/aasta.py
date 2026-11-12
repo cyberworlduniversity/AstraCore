@@ -123,7 +123,10 @@ class AASTATokenizer:
              "context_diversity": diversity, "score": score}
             for score, token, frequency, diversity in selected
         ]
-        return cls(records, context_weight=context_weight)
+        tokenizer = cls(records, context_weight=context_weight)
+        tokenizer.training_candidate_count = len(stats)
+        tokenizer.training_candidate_cap = candidate_cap
+        return tokenizer
 
     def encode(self, text: str) -> list[int]:
         if not isinstance(text, str):
