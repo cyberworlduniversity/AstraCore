@@ -50,10 +50,10 @@ class AASTATests(unittest.TestCase):
         learned_single_codepoints = sum(
             len(token.decode("utf-8")) == 1 for token in tokenizer.tokens
         )
-        # The Tamil-heavy allocation reserves at most 15% of learned slots
+        # The Tamil-focused allocation reserves at most 10% of learned slots
         # for single code points, leaving most Tamil capacity for word spans.
         self.assertLessEqual(
-            learned_single_codepoints, round((300 - 256) * 0.15)
+            learned_single_codepoints, round((300 - 256) * 0.10)
         )
         tamil_tokens = [
             token for token in tokenizer.tokens
