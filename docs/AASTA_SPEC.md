@@ -14,7 +14,7 @@ AASTA is a tokenizer, not a complete language model and not a semantic reasoning
 
 AASTA uses two distinct stages:
 
-1. **Bounded candidate learning.** Enumerate Unicode-code-point-aligned spans up to a configurable UTF-8 byte length, including single multibyte code points such as Tamil letters (single-byte ASCII characters remain in the byte fallback). A conservative grapheme-boundary filter keeps combining marks, Tamil virama sequences, and ZWJ-linked sequences attached to their preceding base, so learned spans do not start or end inside these common clusters. A bounded Space-Saving tracker estimates frequent candidates and records capped left/right context sets plus the number of occurrences aligned to whitespace, punctuation, or text edges.
+1. **Bounded candidate learning.** Enumerate Unicode-code-point-aligned spans up to a configurable UTF-8 byte length, including single multibyte code points such as Tamil letters (single-byte ASCII characters remain in the byte fallback). A bounded Space-Saving tracker estimates frequent candidates and records capped left/right context sets plus the number of occurrences aligned to whitespace, punctuation, or text edges.
 2. **Optimal reversible segmentation.** At inference, use dynamic programming over the UTF-8 byte sequence. Learned tokens may begin and end only at Unicode code-point boundaries; a single multibyte code point is eligible as a learned token. Every byte remains available as a fallback token, guaranteeing that unseen strings can still be encoded.
 
 This is not pair-merging BPE. The vocabulary is selected directly from candidate spans using estimated corpus byte savings and word-boundary alignment, then inference selects a segmentation by dynamic programming.
@@ -75,7 +75,7 @@ Candidate-table memory is bounded by a configurable vocabulary-derived cap, with
 ## 7. Current limitations
 
 - Context diversity is a statistical proxy, not semantic understanding.
-- The grapheme-boundary filter is a conservative approximation, not a complete UAX #29 implementation. Regional-indicator flags and less common script-specific clusters may need additional rules; exact round-trip remains guaranteed by byte fallback.
+- Unicode code points are not the same as user-perceived grapheme clusters; some combining sequences may be split between adjacent tokens, although exact round-trip is preserved.
 - The initial implementation is Python and intended for correctness experiments, not mobile-speed claims.
 - It has not yet been compared on held-out Tamil/English corpora against byte-BPE and Unigram baselines.
 - No claim is made that AASTA is globally novel, patentable, or better than commercial tokenizers until prior-art review and reproducible benchmarks are completed.
