@@ -173,7 +173,7 @@ class AASTATests(unittest.TestCase):
         self.assertFalse(AASTATokenizer._is_boundary("\u0bcd"))
 
     def test_boundary_aligned_phrase_is_learned_as_one_token(self):
-        corpus = [" alpha beta "] * 40
+        corpus = ["alpha beta"] * 40
         tokenizer = AASTATokenizer.train(
             corpus, vocab_size=257, min_frequency=2, max_token_bytes=20
         )
