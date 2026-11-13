@@ -162,6 +162,25 @@ class AASTATests(unittest.TestCase):
         sample = "தமிழ் alpha"
         self.assertEqual(first.decode(first.encode(sample)), sample)
 
+
+    def test_word_boundary_detection_uses_whitespace_and_punctuation(self):
+        self.assertTrue(AASTATokenizer._is_boundary(" "))
+        self.assertTrue(AASTATokenizer._is_boundary("."))
+        self.assertTrue(AASTATokenizer._is_boundary("^"))
+        self.assertTrue(AASTATokenizer._is_boundary("$"))
+        self.assertFalse(AASTATokenizer._is_boundary("a"))
+        self.assertFalse(AASTATokenizer._is_boundary("க"))
+        self.assertFalse(AASTATokenizer._is_boundary("\u0bcd"))
+
+    def test_boundary_aligned_phrase_is_learned_as_one_token(self):
+        corpus = [" alpha beta "] * 40
+        tokenizer = AASTATokenizer.train(
+            corpus, vocab_size=257, min_frequency=2, max_token_bytes=20
+        )
+        phrase = "alpha beta"
+        self.assertIn(phrase.encode("utf-8"), tokenizer.tokens)
+        self.assertEqual(tokenizer.decode(tokenizer.encode(phrase)), phrase)
+
     def test_save_load(self):
         corpus = ["தமிழ் AI தமிழ்", "English AI English"] * 3
         tokenizer = AASTATokenizer.train(corpus, vocab_size=360)
