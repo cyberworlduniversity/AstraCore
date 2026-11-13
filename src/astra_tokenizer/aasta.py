@@ -56,6 +56,27 @@ class AASTATokenizer:
         return char.isspace() or category.startswith("P")
 
     @staticmethod
+    def _is_grapheme_boundary(chars: list[str], offset: int) -> bool:
+        """Return whether offset is a safe boundary between Unicode text clusters.
+
+        This conservative approximation keeps combining marks, Tamil virama
+        sequences, and ZWJ-linked sequences attached to their preceding base.
+        It is not a complete implementation of UAX #29, but avoids learning
+        tokens that begin or end inside common Tamil grapheme clusters.
+        """
+        if offset <= 0 or offset >= len(chars):
+            return True
+        previous = chars[offset - 1]
+        current = chars[offset]
+        if unicodedata.category(current).startswith("M"):
+            return False
+        if current in {"\\u200c", "\\u200d"}:
+            return False
+        if previous in {"\\u200d", "\\u0bcd"}:
+            return False
+        return True
+
+    @staticmethod
     def _validate_parameters(vocab_size: int, min_frequency: int,
                              max_token_bytes: int, context_weight: float) -> None:
         if vocab_size < 256:
@@ -96,6 +117,8 @@ class AASTATokenizer:
                 raise TypeError("Training input must contain strings")
             chars = list(text)
             for start in range(len(chars)):
+                if not cls._is_grapheme_boundary(chars, start):
+                    continue
                 previous = chars[start - 1] if start else "^"
                 encoded = bytearray()
                 for end in range(start, len(chars)):
@@ -107,6 +130,8 @@ class AASTATokenizer:
                     # fallback would otherwise emit 2-4 tokens for it.
                     # Keep single-byte ASCII characters in the byte fallback.
                     if end == start and len(encoded) == 1:
+                        continue
+                    if not cls._is_grapheme_boundary(chars, end + 1):
                         continue
                     token = bytes(encoded)
                     entry = stats.get(token)
@@ -278,9 +303,11 @@ class AASTATokenizer:
         # fallback remains available at every byte for total reversibility.
         boundaries = {0}
         offset = 0
-        for char in text:
+        chars = list(text)
+        for index, char in enumerate(chars):
             offset += len(char.encode("utf-8"))
-            boundaries.add(offset)
+            if self._is_grapheme_boundary(chars, index + 1):
+                boundaries.add(offset)
 
         size = len(data)
         best = [0.0] * (size + 1)
