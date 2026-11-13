@@ -72,7 +72,11 @@ class AASTATokenizer:
             return False
         if current in {"\u200c", "\u200d"}:
             return False
-        if previous in {"\u200d", "\u0bcd"}:
+        if previous == "\u200d":
+            return False
+        # Tamil virama joins the following consonant into the same cluster,
+        # but a word-final virama may end before whitespace or punctuation.
+        if previous == "\u0bcd" and unicodedata.category(current).startswith("L"):
             return False
         return True
 
