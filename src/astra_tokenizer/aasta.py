@@ -213,16 +213,17 @@ class AASTATokenizer:
         tamil_single_ranked.sort(key=rank_key)
 
         learned_budget = vocab_size - 256
-        # Allocate a predictable floor across scripts: 35% Tamil, 45% Latin,
-        # 10% mixed-script and 10% other. Within the Tamil share, reserve up
-        # to 20% of the total learned budget for frequent Tamil code points.
+        # Tamil-heavy allocation experiment: reserve 55% of learned slots
+        # for Tamil, 35% for Latin, 7% for mixed-script, and the remainder
+        # for other scripts. Keep the single-codepoint reserve at 15% so
+        # Tamil multi-codepoint words and compounds retain enough capacity.
         # Any unused quota is returned to a global score-ranked backfill.
-        tamil_quota = round(learned_budget * 0.35)
-        latin_quota = round(learned_budget * 0.45)
-        mixed_quota = round(learned_budget * 0.10)
+        tamil_quota = round(learned_budget * 0.55)
+        latin_quota = round(learned_budget * 0.35)
+        mixed_quota = round(learned_budget * 0.07)
         other_quota = learned_budget - tamil_quota - latin_quota - mixed_quota
         tamil_single_quota = min(
-            len(tamil_single_ranked), round(learned_budget * 0.25)
+            len(tamil_single_ranked), round(learned_budget * 0.15)
         )
         selected = list(tamil_single_ranked[:tamil_single_quota])
         selected_keys = {item[1] for item in selected}
