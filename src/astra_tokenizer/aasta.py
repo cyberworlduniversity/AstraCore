@@ -70,9 +70,9 @@ class AASTATokenizer:
         current = chars[offset]
         if unicodedata.category(current).startswith("M"):
             return False
-        if current in {"\\u200c", "\\u200d"}:
+        if current in {"\u200c", "\u200d"}:
             return False
-        if previous in {"\\u200d", "\\u0bcd"}:
+        if previous in {"\u200d", "\u0bcd"}:
             return False
         return True
 
