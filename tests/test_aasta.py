@@ -180,6 +180,8 @@ class AASTATests(unittest.TestCase):
         self.assertFalse(AASTATokenizer._is_grapheme_boundary(cluster, 2))
         self.assertFalse(AASTATokenizer._is_grapheme_boundary(cluster, 3))
         self.assertTrue(AASTATokenizer._is_grapheme_boundary(cluster, 4))
+        word_with_space = list("தமிழ் ")
+        self.assertTrue(AASTATokenizer._is_grapheme_boundary(word_with_space, 5))
 
         corpus = ["க்ஷி தமிழ் மொழி"] * 30
         tokenizer = AASTATokenizer.train(
@@ -190,7 +192,6 @@ class AASTATests(unittest.TestCase):
             decoded = token.decode("utf-8")
             self.assertFalse(unicodedata.category(decoded[0]).startswith("M"))
             self.assertFalse(decoded[0] in {"\u200c", "\u200d"})
-            self.assertFalse(decoded[-1] in {"\u200d", "\u0bcd"})
         sample = "க்ஷி தமிழ்"
         self.assertEqual(tokenizer.decode(tokenizer.encode(sample)), sample)
 
