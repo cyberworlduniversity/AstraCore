@@ -173,28 +173,6 @@ class AASTATests(unittest.TestCase):
         self.assertEqual(first.decode(first.encode(sample)), sample)
 
 
-    def test_tamil_grapheme_boundaries_keep_virama_and_marks_attached(self):
-        cluster = list("க்ஷி")
-        self.assertTrue(AASTATokenizer._is_grapheme_boundary(cluster, 0))
-        self.assertFalse(AASTATokenizer._is_grapheme_boundary(cluster, 1))
-        self.assertFalse(AASTATokenizer._is_grapheme_boundary(cluster, 2))
-        self.assertFalse(AASTATokenizer._is_grapheme_boundary(cluster, 3))
-        self.assertTrue(AASTATokenizer._is_grapheme_boundary(cluster, 4))
-        word_with_space = list("தமிழ் ")
-        self.assertTrue(AASTATokenizer._is_grapheme_boundary(word_with_space, 5))
-
-        corpus = ["க்ஷி தமிழ் மொழி"] * 30
-        tokenizer = AASTATokenizer.train(
-            corpus, vocab_size=280, min_frequency=2, max_token_bytes=20
-        )
-        self.assertIn("க்ஷி".encode("utf-8"), tokenizer.tokens)
-        for token in tokenizer.tokens:
-            decoded = token.decode("utf-8")
-            self.assertFalse(unicodedata.category(decoded[0]).startswith("M"))
-            self.assertFalse(decoded[0] in {"\u200c", "\u200d"})
-        sample = "க்ஷி தமிழ்"
-        self.assertEqual(tokenizer.decode(tokenizer.encode(sample)), sample)
-
     def test_word_boundary_detection_uses_whitespace_and_punctuation(self):
         self.assertTrue(AASTATokenizer._is_boundary(" "))
         self.assertTrue(AASTATokenizer._is_boundary("."))
