@@ -14,30 +14,31 @@ AASTA is a tokenizer, not a complete language model and not a semantic reasoning
 
 AASTA uses two distinct stages:
 
-1. **Context-diverse vocabulary learning.** Enumerate Unicode-code-point-aligned spans up to a configurable UTF-8 byte length, including single multibyte code points such as Tamil letters (single-byte ASCII characters remain in the byte fallback). Count each span and record the number of distinct left and right neighboring code points observed in the corpus.
+1. **Bounded candidate learning.** Enumerate Unicode-code-point-aligned spans up to a configurable UTF-8 byte length, including single multibyte code points such as Tamil letters (single-byte ASCII characters remain in the byte fallback). A bounded Space-Saving tracker estimates frequent candidates and records capped left/right context sets plus the number of occurrences aligned to whitespace, punctuation, or text edges.
 2. **Optimal reversible segmentation.** At inference, use dynamic programming over the UTF-8 byte sequence. Learned tokens may begin and end only at Unicode code-point boundaries; a single multibyte code point is eligible as a learned token. Every byte remains available as a fallback token, guaranteeing that unseen strings can still be encoded.
 
-This is not pair-merging BPE. The vocabulary is selected directly from candidate spans using a corpus score, then inference selects a segmentation by dynamic programming.
+This is not pair-merging BPE. The vocabulary is selected directly from candidate spans using estimated corpus byte savings and word-boundary alignment, then inference selects a segmentation by dynamic programming.
 
 ## 3. Vocabulary score
 
 For candidate span t:
 
-- f(t): corpus occurrence count
+- f(t): Space-Saving estimated occurrence count
+- e(t): Space-Saving over-count error bound
+- O(t) = max(1, f(t) − e(t)): conservative observed-count estimate
 - L(t): UTF-8 byte length
 - D(t): number of distinct left contexts plus distinct right contexts
-- alpha: configurable context weight (default 0.25)
-- B(t): boundary factor, equal to 1 + 0.35 for each side where at least one observed neighboring code point is non-alphanumeric (maximum 1.7)
+- rL(t), rR(t): observed occurrence shares aligned to a whitespace, punctuation, or text-edge boundary on the left and right
 
-The selection score is:
+The current experimental score is:
 
-**S(t) = ln(1 + f(t)) × (L(t) − 1) × [1 + alpha × ln(1 + D(t))] × B(t)**
+**S(t) = O(t) × (L(t) − 1) × [1 + 1.25rL(t) + 1.25rR(t)] × [1 + 0.05 ln(1 + D(t))]**
 
-The boundary factor is a corpus-context preference, not a token boundary restriction. It rewards spans observed next to whitespace or punctuation.
+Unlike the previous logarithmic-frequency score, this ranks candidates by estimated corpus-wide byte savings. The boundary ratios reward spans that repeatedly occur as whole words or phrases, rather than fragments that happen to touch a boundary once. The context-diversity term is deliberately modest. Unicode punctuation and whitespace are treated as boundaries; combining marks are not treated as boundaries.
 
-Candidates below min_frequency are discarded. Candidate collection is bounded by a Space-Saving frequency tracker: when the table is full, the least-frequent tracked candidate is replaced and the incoming candidate receives the evicted minimum count as an error bound. This deliberately favors repeatedly observed spans over arbitrary hash-selected spans. Context sets remain capped per side. Remaining tracked candidates are sorted by descending S(t), with raw UTF-8 bytes as a deterministic tie-breaker. To prevent one script from monopolizing a multilingual vocabulary, candidates are classified as Tamil, Latin, mixed-script, or other. The default allocation targets 35% Tamil, 45% Latin, 10% mixed-script, and 10% other candidates. Within the Tamil allocation, up to 25% of the total learned-token budget is first reserved for frequent single Tamil code points. Unused per-script quotas are returned through a global score-ranked backfill. These are allocation targets, not guarantees that every corpus will contain enough eligible candidates. The top vocab_size − 256 candidates are retained. Because Space-Saving estimates counts after replacement, benchmark reports must include corpus-specific token counts rather than treating the score as an exact global frequency.
+Candidates below min_frequency are discarded. Candidate collection is bounded by a Space-Saving frequency tracker: when the table is full, the least-frequent tracked candidate is replaced and the incoming candidate receives the evicted minimum count as an error bound. Context sets remain capped per side. Candidates are ranked within Tamil, Latin, mixed-script, and other buckets, then selected using the existing script allocation targets: 35% Tamil, 45% Latin, 10% mixed-script, and 10% other. Up to 25% of the learned-token budget is reserved for frequent single Tamil code points. Unused quotas are returned through global score-ranked backfill. These are allocation targets, not guarantees that every corpus will contain enough eligible candidates. The top vocab_size − 256 candidates are retained.
 
-Interpretation: frequent spans that save more bytes and appear across varied contexts are favored. This is a statistical selection heuristic; it does not prove that a span has semantic meaning.
+This score is a heuristic estimate, not an exact solution to the overlapping-token vocabulary optimization problem. Held-out token counts must determine whether it improves compression.
 
 ## 4. Inference segmentation
 
@@ -69,7 +70,7 @@ Let N be the number of Unicode code points in the training corpus, M the configu
 - Encoding uses trie traversal and dynamic programming; practical work depends on the maximum token length and matches at each position. Memory is O(T).
 - Decoding is O(total decoded bytes).
 
-Candidate-table memory is bounded by a configurable vocabulary-derived cap, with a lazy min-heap periodically compacted to remain proportional to that cap. Large-corpus streaming, grapheme-cluster-aware boundaries, and optimized native/mobile implementations remain future engineering work.
+Candidate-table memory is bounded by a configurable vocabulary-derived cap, with a lazy min-heap periodically compacted to remain proportional to that cap. Boundary occurrence counters add constant memory per tracked candidate. Large-corpus streaming, grapheme-cluster-aware boundaries, and optimized native/mobile implementations remain future engineering work.
 
 ## 7. Current limitations
 
