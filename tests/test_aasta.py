@@ -50,7 +50,17 @@ class AASTATests(unittest.TestCase):
         learned_single_codepoints = sum(
             len(token.decode("utf-8")) == 1 for token in tokenizer.tokens
         )
-        self.assertGreaterEqual(learned_single_codepoints, (300 - 256) // 4)
+        # The Tamil-focused allocation reserves at most 10% of learned slots
+        # for single code points, leaving most Tamil capacity for word spans.
+        self.assertLessEqual(
+            learned_single_codepoints, round((300 - 256) * 0.10)
+        )
+        tamil_tokens = [
+            token for token in tokenizer.tokens
+            if any("TAMIL" in unicodedata.name(char, "")
+                   for char in token.decode("utf-8"))
+        ]
+        self.assertGreaterEqual(len(tamil_tokens), round((300 - 256) * 0.55))
 
     def test_frequent_tamil_span_survives_candidate_pressure(self):
         corpus = ["தமிழ் அறிவியல் தமிழ் மொழி " * 4 for _ in range(80)]
@@ -161,6 +171,25 @@ class AASTATests(unittest.TestCase):
         self.assertLessEqual(first.training_candidate_count, 3)
         sample = "தமிழ் alpha"
         self.assertEqual(first.decode(first.encode(sample)), sample)
+
+
+    def test_word_boundary_detection_uses_whitespace_and_punctuation(self):
+        self.assertTrue(AASTATokenizer._is_boundary(" "))
+        self.assertTrue(AASTATokenizer._is_boundary("."))
+        self.assertTrue(AASTATokenizer._is_boundary("^"))
+        self.assertTrue(AASTATokenizer._is_boundary("$"))
+        self.assertFalse(AASTATokenizer._is_boundary("a"))
+        self.assertFalse(AASTATokenizer._is_boundary("க"))
+        self.assertFalse(AASTATokenizer._is_boundary("\u0bcd"))
+
+    def test_boundary_aligned_phrase_is_learned_as_one_token(self):
+        corpus = ["alpha beta"] * 40
+        tokenizer = AASTATokenizer.train(
+            corpus, vocab_size=257, min_frequency=2, max_token_bytes=20
+        )
+        phrase = "alpha beta"
+        self.assertIn(phrase.encode("utf-8"), tokenizer.tokens)
+        self.assertEqual(tokenizer.decode(tokenizer.encode(phrase)), phrase)
 
     def test_save_load(self):
         corpus = ["தமிழ் AI தமிழ்", "English AI English"] * 3

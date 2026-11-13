@@ -49,6 +49,13 @@ class AASTATokenizer:
             node[None] = 256 + offset
 
     @staticmethod
+    def _is_boundary(char: str) -> bool:
+        if char in {"^", "$"}:
+            return True
+        category = unicodedata.category(char)
+        return char.isspace() or category.startswith("P")
+
+    @staticmethod
     def _validate_parameters(vocab_size: int, min_frequency: int,
                              max_token_bytes: int, context_weight: float) -> None:
         if vocab_size < 256:
@@ -126,9 +133,9 @@ class AASTATokenizer:
                                 raise RuntimeError("AASTA candidate tracker lost heap state")
                             del stats[evicted]
                             estimated_count = min_count + 1
-                            entry = [estimated_count, set(), set(), min_count, 0]
+                            entry = [estimated_count, set(), set(), min_count, 0, 0, 0]
                         else:
-                            entry = [1, set(), set(), 0, 0]
+                            entry = [1, set(), set(), 0, 0, 0, 0]
                         stats[token] = entry
                     else:
                         entry[0] += 1
@@ -145,26 +152,34 @@ class AASTATokenizer:
                         entry[1].add(previous)
                     if len(entry[2]) < cls.MAX_CONTEXTS_PER_SIDE:
                         entry[2].add(following)
+                    if cls._is_boundary(previous):
+                        entry[5] += 1
+                    if cls._is_boundary(following):
+                        entry[6] += 1
 
         ranked_by_bucket: dict[str, list[tuple[float, bytes, int, int]]] = {
             "tamil": [], "latin": [], "mixed": [], "other": []
         }
         tamil_single_ranked: list[tuple[float, bytes, int, int]] = []
-        for token, (frequency, left, right, _error, _version) in stats.items():
+        for token, (frequency, left, right, error, _version,
+                    left_boundary_count, right_boundary_count) in stats.items():
             if frequency < min_frequency:
                 continue
             diversity = len(left) + len(right)
             length = len(token)
-            # Reward repeated byte savings and use-context diversity to avoid
-            # selecting only a single repeated phrase from one narrow context.
-            left_boundary = any(not char.isalnum() for char in left)
-            right_boundary = any(not char.isalnum() for char in right)
-            boundary_factor = 1.0 + 0.35 * (
-                int(left_boundary) + int(right_boundary)
+            observed_count = max(1, frequency - error)
+            # Favor spans whose occurrences repeatedly align to word or
+            # punctuation boundaries, not fragments that touch one boundary
+            # only occasionally.
+            left_boundary_ratio = min(1.0, left_boundary_count / observed_count)
+            right_boundary_ratio = min(1.0, right_boundary_count / observed_count)
+            boundary_factor = (
+                1.0 + 1.25 * left_boundary_ratio + 1.25 * right_boundary_ratio
             )
-            score = (math.log1p(frequency) * (length - 1)
-                     * (1.0 + context_weight * math.log1p(diversity))
-                     * boundary_factor)
+            # Estimate corpus-wide byte savings directly. Linear frequency
+            # prevents long but rare fragments from outranking useful words.
+            score = (observed_count * (length - 1) * boundary_factor
+                     * (1.0 + 0.05 * math.log1p(diversity)))
             item = (score, token, frequency, diversity)
 
             # Classify candidates by the scripts they actually contain. This
@@ -188,6 +203,14 @@ class AASTATokenizer:
                 bucket = "latin"
             else:
                 bucket = "other"
+            # Favor reusable multi-letter Tamil spans. This is a
+            # vocabulary-selection heuristic for agglutinative/compound
+            # words that may not contain whitespace at morpheme boundaries.
+            # The multiplier is bounded so frequency and byte savings remain
+            # the dominant signals.
+            if bucket == "tamil" and tamil_letters >= 2:
+                score *= 1.0 + min(0.40, 0.10 * (tamil_letters - 1))
+                item = (score, token, frequency, diversity)
             ranked_by_bucket[bucket].append(item)
             if len(decoded) == 1 and tamil_letters:
                 tamil_single_ranked.append(item)
@@ -198,16 +221,17 @@ class AASTATokenizer:
         tamil_single_ranked.sort(key=rank_key)
 
         learned_budget = vocab_size - 256
-        # Allocate a predictable floor across scripts: 35% Tamil, 45% Latin,
-        # 10% mixed-script and 10% other. Within the Tamil share, reserve up
-        # to 20% of the total learned budget for frequent Tamil code points.
+        # Tamil-focused allocation experiment: reserve 65% of learned slots
+        # for Tamil, 28% for Latin, 5% for mixed-script, and the remainder
+        # for other scripts. Keep the single-codepoint reserve at 10% so
+        # Tamil multi-letter spans can occupy most of the Tamil budget.
         # Any unused quota is returned to a global score-ranked backfill.
-        tamil_quota = round(learned_budget * 0.35)
-        latin_quota = round(learned_budget * 0.45)
-        mixed_quota = round(learned_budget * 0.10)
+        tamil_quota = round(learned_budget * 0.65)
+        latin_quota = round(learned_budget * 0.28)
+        mixed_quota = round(learned_budget * 0.05)
         other_quota = learned_budget - tamil_quota - latin_quota - mixed_quota
         tamil_single_quota = min(
-            len(tamil_single_ranked), round(learned_budget * 0.25)
+            len(tamil_single_ranked), round(learned_budget * 0.10)
         )
         selected = list(tamil_single_ranked[:tamil_single_quota])
         selected_keys = {item[1] for item in selected}
@@ -333,7 +357,7 @@ class AASTATokenizer:
             "base_vocab_size": 256,
             "vocab_size": self.vocab_size,
             "context_weight": self.context_weight,
-            "selection": "space_saving_script_balanced_frequency_byte_savings_context_diversity_boundary",
+            "selection": "space_saving_script_balanced_estimated_byte_savings_word_boundary_ratio_context",
             "tokens": [
                 {"hex": raw.hex(), "frequency": self.frequencies[i],
                  "context_diversity": self.context_diversities[i]}
