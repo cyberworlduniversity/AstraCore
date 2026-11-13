@@ -376,7 +376,7 @@ class AASTATokenizer:
             "base_vocab_size": 256,
             "vocab_size": self.vocab_size,
             "context_weight": self.context_weight,
-            "selection": "space_saving_script_balanced_estimated_byte_savings_word_boundary_ratio_context",
+            "selection": "space_saving_script_balanced_estimated_byte_savings_word_boundary_ratio_context_grapheme_safe",
             "tokens": [
                 {"hex": raw.hex(), "frequency": self.frequencies[i],
                  "context_diversity": self.context_diversities[i]}
