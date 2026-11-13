@@ -203,6 +203,14 @@ class AASTATokenizer:
                 bucket = "latin"
             else:
                 bucket = "other"
+            # Favor reusable multi-letter Tamil spans. This is a
+            # vocabulary-selection heuristic for agglutinative/compound
+            # words that may not contain whitespace at morpheme boundaries.
+            # The multiplier is bounded so frequency and byte savings remain
+            # the dominant signals.
+            if bucket == "tamil" and tamil_letters >= 2:
+                score *= 1.0 + min(0.40, 0.10 * (tamil_letters - 1))
+                item = (score, token, frequency, diversity)
             ranked_by_bucket[bucket].append(item)
             if len(decoded) == 1 and tamil_letters:
                 tamil_single_ranked.append(item)
@@ -213,17 +221,17 @@ class AASTATokenizer:
         tamil_single_ranked.sort(key=rank_key)
 
         learned_budget = vocab_size - 256
-        # Tamil-heavy allocation experiment: reserve 55% of learned slots
-        # for Tamil, 35% for Latin, 7% for mixed-script, and the remainder
-        # for other scripts. Keep the single-codepoint reserve at 15% so
-        # Tamil multi-codepoint words and compounds retain enough capacity.
+        # Tamil-focused allocation experiment: reserve 65% of learned slots
+        # for Tamil, 28% for Latin, 5% for mixed-script, and the remainder
+        # for other scripts. Keep the single-codepoint reserve at 10% so
+        # Tamil multi-letter spans can occupy most of the Tamil budget.
         # Any unused quota is returned to a global score-ranked backfill.
-        tamil_quota = round(learned_budget * 0.55)
-        latin_quota = round(learned_budget * 0.35)
-        mixed_quota = round(learned_budget * 0.07)
+        tamil_quota = round(learned_budget * 0.65)
+        latin_quota = round(learned_budget * 0.28)
+        mixed_quota = round(learned_budget * 0.05)
         other_quota = learned_budget - tamil_quota - latin_quota - mixed_quota
         tamil_single_quota = min(
-            len(tamil_single_ranked), round(learned_budget * 0.15)
+            len(tamil_single_ranked), round(learned_budget * 0.10)
         )
         selected = list(tamil_single_ranked[:tamil_single_quota])
         selected_keys = {item[1] for item in selected}
