@@ -189,8 +189,8 @@ class AASTATests(unittest.TestCase):
         for token in tokenizer.tokens:
             decoded = token.decode("utf-8")
             self.assertFalse(unicodedata.category(decoded[0]).startswith("M"))
-            self.assertFalse(decoded[0] in {"\\u200c", "\\u200d"})
-            self.assertFalse(decoded[-1] in {"\\u200d", "\\u0bcd"})
+            self.assertFalse(decoded[0] in {"\u200c", "\u200d"})
+            self.assertFalse(decoded[-1] in {"\u200d", "\u0bcd"})
         sample = "க்ஷி தமிழ்"
         self.assertEqual(tokenizer.decode(tokenizer.encode(sample)), sample)
 
